@@ -1,6 +1,6 @@
 const firebaseConfig = {
     apiKey: "AIzaSyBEatS2GakJM3G-9l9nP00Pg1dts-BB2bU",
-    authDomain: "icgnube-7abb3.firebaseapp.com",
+    authDomain: "localhost",
     databaseURL: "https://icgnube-7abb3-default-rtdb.firebaseio.com",
     projectId: "icgnube-7abb3",
     storageBucket: "icgnube-7abb3.firebasestorage.app",
