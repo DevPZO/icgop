@@ -329,6 +329,25 @@ function renderTable(period) {
 
 function selectCell(cell) { document.querySelectorAll('.selected-cell').forEach(c => c.classList.remove('selected-cell')); cell.classList.add('selected-cell'); }
 
+// NUEVA FUNCIÓN: Calcula las horas automáticamente según la actividad y rango de días
+function updateCalculatedHours() {
+    const startD = parseInt(document.getElementById('editorStartDay').value) || 1;
+    const endD = parseInt(document.getElementById('editorEndDay').value) || startD;
+    const activity = getSelectVal('editorActivity').toUpperCase();
+    
+    // 1. Determinar el rango de días
+    const days = Math.max(1, (endD - startD) + 1);
+    
+    // 2. Determinar las horas base por turno según la actividad
+    let baseHours = 12; // Por defecto para Buque, Gabarra, Tapado u otros
+    if (activity.includes("MUESTREO") || activity.includes("ATESTIGUAMIENTO") || activity.includes("DRAFT")) {
+        baseHours = 4;
+    }
+    
+    // 3. Asignar el resultado al campo en pantalla
+    document.getElementById('editorHours').value = days * baseHours;
+}
+
 function openEditor(eid, dix) {
     currentEdit = { empId: eid, dayIdx: dix };
     const p = document.getElementById('monthSelector').value;
@@ -343,6 +362,18 @@ function openEditor(eid, dix) {
     document.getElementById('editorShift').value = rec ? rec.shift : 'Diurno';
     document.getElementById('editorObs').value = rec ? (rec.obs || '') : '';
     document.getElementById('editorPhantom').checked = rec ? (rec.isPhantom || false) : false;
+    // Si ya tiene horas guardadas las muestra, de lo contrario calcula automáticamente
+    if (rec && rec.hours !== undefined) {
+        document.getElementById('editorHours').value = rec.hours;
+    } else {
+        updateCalculatedHours();
+    }
+
+    // Escuchar cambios de actividad para recalcular
+    document.getElementById('editorActivity').onchange = function() {
+        checkOther('Activity');
+        updateCalculatedHours();
+    };
     fillSelect('editorRole', ROLES, rec ? rec.role : emp.role);
     fillSelectOther('editorSite', appData.sites, rec ? rec.site : '');
     fillSelectOther('editorActivity', appData.activities, rec ? rec.activity : '');
@@ -352,6 +383,7 @@ function openEditor(eid, dix) {
 function copyRecord() {
     copiedRecordData = {
         span: parseInt(document.getElementById('editorEndDay').value) - parseInt(document.getElementById('editorStartDay').value),
+        hours: document.getElementById('editorHours').value,
         amount: document.getElementById('editorAmount').value,
         role: document.getElementById('editorRole').value,
         site: document.getElementById('editorSite').value,
@@ -370,6 +402,7 @@ function pasteRecord() {
     let newEnd = startD + copiedRecordData.span;
     if (newEnd > 31) newEnd = 31; 
     document.getElementById('editorEndDay').value = newEnd;
+    document.getElementById('editorHours').value = copiedRecordData.hours || '';
     document.getElementById('editorAmount').value = copiedRecordData.amount;
     document.getElementById('editorRole').value = copiedRecordData.role;
     document.getElementById('editorSite').value = copiedRecordData.site;
@@ -421,10 +454,18 @@ function saveEditor() {
     for(let d=startD; d<=endD; d++) { userRow[d-1] = null; } 
     
     if (amount > 0) {
-        const commonData = { role: document.getElementById('editorRole').value, site: getSelectVal('editorSite'), activity: getSelectVal('editorActivity'), shift: document.getElementById('editorShift').value, obs: document.getElementById('editorObs').value, isPhantom: document.getElementById('editorPhantom').checked };
-        userRow[startD-1] = { amount: amount, span: span, ...commonData };
-        for(let k=1; k < span; k++) { userRow[startD-1+k] = { amount: 0, linked: true, span: 0, ...commonData }; }
-    }
+            const commonData = { 
+                role: document.getElementById('editorRole').value, 
+                site: getSelectVal('editorSite'), 
+                activity: getSelectVal('editorActivity'), 
+                shift: document.getElementById('editorShift').value, 
+                obs: document.getElementById('editorObs').value, 
+                isPhantom: document.getElementById('editorPhantom').checked,
+                hours: parseFloat(document.getElementById('editorHours').value) || 0
+            };
+            userRow[startD-1] = { amount: amount, span: span, ...commonData };
+            for(let k=1; k < span; k++) { userRow[startD-1+k] = { amount: 0, linked: true, span: 0, ...commonData }; }
+        }
     save(); closeEditor(); renderTable(p);
 }
 
