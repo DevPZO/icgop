@@ -1,6 +1,6 @@
 const firebaseConfig = {
     apiKey: "AIzaSyBEatS2GakJM3G-9l9nP00Pg1dts-BB2bU",
-    authDomain: "icgnube-7abb3.firebaseapp.com"",
+    authDomain: "icgnube-7abb3.firebaseapp.com",
     databaseURL: "https://icgnube-7abb3-default-rtdb.firebaseio.com",
     projectId: "icgnube-7abb3",
     storageBucket: "icgnube-7abb3.firebasestorage.app",
@@ -857,7 +857,106 @@ function changeStatus(id,newStatus){const emp=appData.employees.find(e=>e.id==id
 function changeRole(id,newRole){const emp=appData.employees.find(e=>e.id==id);if(emp){emp.role=newRole;save();renderConfigLists();renderSuggestions();renderAllCharts();renderAnalytics();}}
 function setAllAvailable(){if(!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?"))return;appData.employees.forEach(e=>e.status="Disponible");save();renderConfigLists();renderSuggestions();alert("Todo el personal está ahora disponible.");}
 function deleteEmployee(id){if(confirm('¿Eliminar empleado? Esto borrará su historial.')){appData.employees=appData.employees.filter(e=>e.id!==id);save();renderConfigLists();}}
-function exportToExcel(){const table=document.getElementById('payrollTable');const p=document.getElementById('monthSelector').value;const html=table.outerHTML;const url='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html);const downloadLink=document.createElement("a");document.body.appendChild(downloadLink);downloadLink.href=url;downloadLink.download=`Nomina_${p}.xls`;downloadLink.click();document.body.removeChild(downloadLink);}
+function exportToExcel() {
+    const p = document.getElementById('monthSelector').value;
+    const currentYear = p.split(' ')[1];
+    
+    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
+    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
+    
+    html += '<thead style="background-color: #f8fafc;"><tr>';
+    html += '<th style="font-weight:bold; width: 200px;">EMPLEADO</th>';
+    for (let i = 1; i <= 31; i++) { html += `<th style="font-weight:bold;">${i}</th>`; }
+    html += '<th style="font-weight:bold;">TOTAL MES</th>';
+    html += '<th style="font-weight:bold;">ACUM. ANUAL</th>';
+    html += '<th style="font-weight:bold;">HORAS MES</th>';
+    html += '<th style="font-weight:bold;">HORAS AÑO</th>';
+    html += '</tr></thead><tbody>';
+
+    // Iniciamos la cuenta en la Fila 2 de Excel (la Fila 1 son los encabezados)
+    let rowIndex = 2; 
+
+    appData.employees.forEach(emp => {
+        const filter = document.getElementById('searchPayroll').value.toUpperCase();
+        if (filter && !emp.name.includes(filter)) return;
+
+        let mTotal = 0; let mHours = 0;
+        let cells = '';
+        const userRecs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
+
+        for (let i = 0; i < 31; i++) {
+            const rec = userRecs[i];
+            if (rec && rec.span > 1) {
+                const amtNum = parseFloat(rec.amount) || 0;
+                const hrsNum = parseFloat(rec.hours) || 0;
+                if (!rec.isPhantom) {
+                    mTotal += amtNum;
+                    mHours += hrsNum;
+                }
+                
+                // Puros números, sin texto ni emojis. Ausencias se marcan con "X"
+                const cellText = rec.isPhantom ? "X" : amtNum;
+                cells += `<td colspan="${rec.span}" style="text-align:center; background-color: #e2e8f0;" x:num>${cellText}</td>`;
+                i += (rec.span - 1);
+            } else if (rec && rec.linked) {
+                // Las celdas combinadas absorben esto
+            } else {
+                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
+                const hrs = rec ? (parseFloat(rec.hours) || 0) : 0;
+                if (!rec || !rec.isPhantom) {
+                    mTotal += amt;
+                    mHours += hrs;
+                }
+                
+                let text = "";
+                if (rec && rec.isPhantom) text = "X";
+                else if (amt > 0) text = amt;
+                
+                cells += `<td style="text-align:center;" x:num>${text}</td>`;
+            }
+        }
+
+        let yTotal = 0; let yHours = 0;
+        PERIODS.filter(x => x.includes(currentYear)).forEach(x => {
+            if (appData.records[x] && appData.records[x][emp.id]) {
+                appData.records[x][emp.id].forEach(r => {
+                    if (r && !r.isPhantom && (parseFloat(r.amount) > 0)) {
+                        yTotal += parseFloat(r.amount) || 0;
+                        yHours += parseFloat(r.hours) || 0;
+                    }
+                });
+            }
+        });
+
+        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+
+        // Inyectamos la fórmula =SUM para auditar en Excel y guardamos el dato real como respaldo (x:fmla)
+        html += `<tr>
+            <td><b>${emp.name}</b> - ${emp.role}</td>
+            ${cells}
+            <td style="text-align:center; font-weight:bold; background-color:#f8fafc;" x:num x:fmla="=SUM(B${rowIndex}:AF${rowIndex})">${mTotal}</td>
+            <td style="text-align:center; font-weight:bold; color: #16a34a;" x:num>${yTotal}</td>
+            <td style="text-align:center; font-weight:bold;" x:num>${mHours}</td>
+            <td style="text-align:center; font-weight:bold; color: #16a34a;" x:num>${yHours}</td>
+        </tr>`;
+        
+        // Sumamos 1 a la fila para el siguiente empleado
+        rowIndex++;
+    });
+
+    html += '</tbody></table></body></html>';
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    
+    document.body.appendChild(downloadLink);
+    downloadLink.href = url;
+    downloadLink.download = `Nomina_${p}.xls`;
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+}
 async function downloadData(){const str=JSON.stringify(appData);try{const handle=await window.showSaveFilePicker({suggestedName:'icg_backup.json',types:[{description:'JSON File',accept:{'application/json':['.json']}}]});const writable=await handle.createWritable();await writable.write(str);await writable.close();}catch(err){if(err.name!=='AbortError'){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(str);a.download="icg_backup_v1.0.json";document.body.appendChild(a);a.click();a.remove();}}setDirty(false);}
 
 function changeDistance(id, newDist){
