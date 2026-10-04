@@ -59,6 +59,7 @@
                 <div id="unsavedDot" class="unsaved-dot"></div>
             </button>
             <button class="nav-btn" id="nav-nomina" onclick="switchTab('nomina')">📅 Nómina</button>
+            <button class="nav-btn" id="nav-surveyors" onclick="switchTab('surveyors')">🚢 Surveyors</button>
             <button class="nav-btn" id="nav-registro" onclick="switchTab('registro')">📝 Reg. Rápido</button>
             <button class="nav-btn" id="nav-sugerencias" onclick="switchTab('sugerencias')">💡 Sugerencias</button>
             <button class="nav-btn" id="nav-graficos" onclick="switchTab('graficos')">📈 Gráficos</button>
@@ -83,6 +84,7 @@
                                     <option value="Supervisor">Supervisor</option>
                                     <option value="Tecnico de Seguridad">Técnico</option>
                                     <option value="Inspector">Inspector</option>
+                                    <option value="Surveyor">Surveyor</option>
                                 </select>
                                 <input type="number" id="newEmpDistance" placeholder="Dist (1-10)" min="1" max="10" class="compact-input distance-input" title="Distancia de residencia (1 = Cerca, 10 = Muy Lejos)">
                                 <button onclick="addEmployee()" class="compact-btn btn-add">+</button>
@@ -157,7 +159,27 @@
                     </div>
                 </div>
             </section>
-
+            <!-- NUEVA PESTAÑA: SURVEYORS -->
+            <section id="tab-surveyors" class="view-section">
+                <div class="toolbar">
+                    <div class="toolbar-group">
+                        <label><strong>Periodo:</strong></label>
+                        <select id="monthSelectorSurv" class="compact-input period-selector" onchange="syncMonths(this.value)"></select>
+                    </div>
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchSurveyor" class="search-input" placeholder="Buscar surveyor..." onkeyup="renderSurveyorTable(document.getElementById('monthSelectorSurv').value)">
+                    </div>
+                    <div class="toolbar-group">
+                        <div id="monthlyTotalDisplaySurv"><span>Total: <strong id="monthTotalSurv" class="total-highlight">0</strong></span></div>
+                        <button class="compact-btn btn-excel" onclick="exportSurveyorsToExcel()">📊 Exportar Excel</button>
+                    </div>
+                </div>
+                
+                <div class="table-wrapper">
+                    <table id="surveyorTable"><thead><tr id="tableHeaderSurv"></tr></thead><tbody id="tableBodySurv"></tbody></table>
+                </div>
+            </section>
             <section id="tab-sugerencias" class="view-section">
                 <div class="toolbar space-between">
                     <div class="toolbar-group">
@@ -328,7 +350,67 @@
                 <button class="btn-cancel" onclick="closeEditor()">Cancelar</button>
             </div>
         </div>
+        <!-- NUEVO MODAL PARA SURVEYORS -->
+        <div class="modal-overlay" id="surveyorEditorModal">
+            <div class="editor-box" style="width: 400px;">
+                <h4 class="modal-header-title" id="survModalTitle">Registro Surveyor</h4>
+                
+                <div class="modal-action-group">
+                    <button class="compact-btn btn-modal-delete" onclick="deleteSurveyorRecord()">🗑️ Borrar</button>
+                </div>
 
+                <div class="form-row-split">
+                    <div class="form-group"><label class="form-label">Desde día:</label><input type="number" id="survStartDay" class="form-control input-readonly" readonly></div>
+                    <div class="form-group"><label class="form-label">Hasta día:</label><input type="number" id="survEndDay" class="form-control" min="1" max="31" onchange="updateSurvHours()" onkeyup="updateSurvHours()"></div>
+                </div>
+                
+                <div class="form-row-split">
+                    <div class="form-group"><label class="form-label">Horas (Automático)</label><input type="number" id="survHours" class="form-control"></div>
+                    <div class="form-group"><label class="form-label">Monto ($)</label><input type="number" id="survAmount" class="form-control" value="1400"></div>
+                </div>
+
+                <div class="form-group"><label class="form-label">Buque o Gabarra atendida</label><input type="text" id="survVessel" class="form-control" placeholder="Ej: MV STAR EXPLORER"></div>
+                
+                <div class="form-row-split">
+                    <div class="form-group">
+                        <label class="form-label">Muelle</label>
+                        <select id="survMuelle" class="form-control" onchange="checkSurvOther('Muelle')">
+                            <option value="" disabled selected>Seleccione...</option>
+                            <option value="Sidor">Sidor</option><option value="Venalum">Venalum</option><option value="Copal">Copal</option>
+                            <option value="Fmo">Fmo</option><option value="Bauxilum">Bauxilum</option><option value="Punta de Piedras">Punta de Piedras</option>
+                            <option value="N/A">N/A</option><option value="OTRO">OTRO (Escribir)</option>
+                        </select>
+                        <input id="survMuelleOther" class="other-input form-control" placeholder="Especifique...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Zona de Fondeo</label>
+                        <select id="survFondeo" class="form-control" onchange="checkSurvOther('Fondeo')">
+                            <option value="" disabled selected>Seleccione...</option>
+                            <option value="Milla 44">Milla 44</option><option value="Boca de Serpiente">Boca de Serpiente</option>
+                            <option value="N/A">N/A</option><option value="OTRO">OTRO (Escribir)</option>
+                        </select>
+                        <input id="survFondeoOther" class="other-input form-control" placeholder="Especifique...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Actividad</label>
+                    <select id="survActivity" class="form-control" onchange="checkSurvOther('Activity')">
+                        <option value="" disabled selected>Seleccione...</option>
+                        <option value="Draft Survey a buque">Draft Survey a buque</option><option value="Draft Survey a Gabarra(s)">Draft Survey a Gabarra(s)</option>
+                        <option value="Bunker Survey">Bunker Survey</option><option value="Full Condition Survey">Full Condition Survey</option>
+                        <option value="Tecnico a Bordo">Técnico a Bordo</option><option value="Instalacion de termocuplas">Instalación de termocuplas</option>
+                        <option value="OTRO">OTRO (Escribir)</option>
+                    </select>
+                    <input id="survActivityOther" class="other-input form-control" placeholder="Especifique...">
+                </div>
+                
+                <div class="form-group"><label class="form-label">Observaciones / Incidencias</label><textarea id="survObs" class="form-control" rows="2" placeholder="Notas extra..."></textarea></div>
+                
+                <button class="btn-save" onclick="saveSurveyorEditor()">GUARDAR CAMBIOS</button>
+                <button class="btn-cancel" onclick="closeSurvEditor()">Cancelar</button>
+            </div>
+        </div>
         <div class="modal-overlay" id="baseModal">
             <div class="editor-box modal-lg">
                 <h4 class="modal-header-title-simple">💰 Acumulados Previos (Ene-Nov 2025)</h4>

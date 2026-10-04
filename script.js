@@ -1,6 +1,6 @@
 const firebaseConfig = {
     apiKey: "AIzaSyBEatS2GakJM3G-9l9nP00Pg1dts-BB2bU",
-    authDomain: "icgnube-7abb3.firebaseapp.com"",
+    authDomain: "icgnube-7abb3.firebaseapp.com",
     databaseURL: "https://icgnube-7abb3-default-rtdb.firebaseio.com",
     projectId: "icgnube-7abb3",
     storageBucket: "icgnube-7abb3.firebasestorage.app",
@@ -16,8 +16,8 @@ const DATA_INCRUSTADA = null;
 const MONTHS_BASE = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 let PERIODS = ["DICIEMBRE 2025"]; MONTHS_BASE.forEach(m => PERIODS.push(`${m} 2026`));
 const DAYS_IN_MONTH = 31;
-const ROLES = ["Supervisor", "Tecnico de Seguridad", "Inspector"];
-const ROLE_COLORS = { "Supervisor": "#2563eb", "Tecnico de Seguridad": "#16a34a", "Inspector": "#d97706" };
+const ROLES = ["Supervisor", "Tecnico de Seguridad", "Inspector", "Surveyor"];
+const ROLE_COLORS = { "Supervisor": "#2563eb", "Tecnico de Seguridad": "#16a34a", "Inspector": "#d97706", "Surveyor": "#8b5cf6" };
 const PALETTE = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#64748b"];
 const IGNORE_SHIFT_ACTIVITIES = ["ATESTIGUAMIENTO", "INSPECCION", "MUESTREO", "DRAFT SURVEY", "INSPECCIÓN"];
 
@@ -188,10 +188,11 @@ function loadParsedData(parsed, isEmbedded) {
 function syncMonths(val) {
     document.getElementById('monthSelector').value = val;
     document.getElementById('monthSelectorSug').value = val;
+    if(document.getElementById('monthSelectorSurv')) document.getElementById('monthSelectorSurv').value = val;
+    
     handleMonthChange();
-    if (document.getElementById('tab-sugerencias').classList.contains('active')) {
-        renderSuggestions();
-    }
+    if (document.getElementById('tab-sugerencias').classList.contains('active')) renderSuggestions();
+    if (document.getElementById('tab-surveyors').classList.contains('active')) renderSurveyorTable(val);
 }
 
 function closeEditor() { document.getElementById('cellEditorModal').classList.remove('open'); }
@@ -211,6 +212,15 @@ function switchTab(tab) {
     if(tab === 'sugerencias') renderSuggestions();
     if(tab === 'graficos') renderAllCharts();
     if(tab === 'analytics') renderAnalytics();
+    if(tab === 'surveyors') {
+        // Copiamos los meses disponibles al selector de Surveyors
+        const selSurv = document.getElementById('monthSelectorSurv');
+        if(selSurv && selSurv.options.length === 0) {
+            selSurv.innerHTML = document.getElementById('monthSelector').innerHTML;
+            selSurv.value = document.getElementById('monthSelector').value;
+        }
+        renderSurveyorTable(selSurv.value);
+    }
     if(tab === 'registro') initQuickEntry();
 }
 
@@ -256,6 +266,7 @@ function renderTable(period) {
     let grandTotal = 0; const currentYear = period.split(' ')[1];
 
     appData.employees.forEach(emp => {
+        if (emp.role === "Surveyor") return; // <--- NUEVA LÍNEA: Oculta a los surveyors de aquí
         if(filter && !emp.name.includes(filter)) return;
         if(!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(DAYS_IN_MONTH).fill(null);
         let mTotal = 0; 
@@ -814,6 +825,7 @@ function renderConfigLists(){
             <option value="Supervisor" ${e.role==='Supervisor'?'selected':''}>Supervisor</option>
             <option value="Tecnico de Seguridad" ${e.role==='Tecnico de Seguridad'?'selected':''}>Técnico</option>
             <option value="Inspector" ${e.role==='Inspector'?'selected':''}>Inspector</option>
+            <option value="Surveyor" ${e.role==='Surveyor'?'selected':''}>Surveyor</option>
         </select>
         <select class="status-select ${getStatusClass(e.status)}" onchange="changeStatus(${e.id},this.value)">
             <option value="Disponible" ${e.status==='Disponible'?'selected':''}>🟢 Disp.</option>
@@ -858,6 +870,242 @@ function changeRole(id,newRole){const emp=appData.employees.find(e=>e.id==id);if
 function setAllAvailable(){if(!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?"))return;appData.employees.forEach(e=>e.status="Disponible");save();renderConfigLists();renderSuggestions();alert("Todo el personal está ahora disponible.");}
 function deleteEmployee(id){if(confirm('¿Eliminar empleado? Esto borrará su historial.')){appData.employees=appData.employees.filter(e=>e.id!==id);save();renderConfigLists();}}
 function exportToExcel(){const table=document.getElementById('payrollTable');const p=document.getElementById('monthSelector').value;const html=table.outerHTML;const url='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html);const downloadLink=document.createElement("a");document.body.appendChild(downloadLink);downloadLink.href=url;downloadLink.download=`Nomina_${p}.xls`;downloadLink.click();document.body.removeChild(downloadLink);}
+/* =========================================
+   LÓGICA EXCLUSIVA PARA SURVEYORS
+========================================= */
+
+function renderSurveyorTable(period) {
+    const tbody = document.getElementById('tableBodySurv');
+    const thead = document.getElementById('tableHeaderSurv');
+    if(!tbody || !thead) return;
+    
+    tbody.innerHTML = '';
+    if(!appData.records[period]) appData.records[period] = {};
+    const filter = document.getElementById('searchSurveyor').value.toUpperCase();
+
+    let h = `<th class="sticky-col sticky-col-header" style="text-align:left; min-width:140px;">EMPLEADO (SURVEYOR)</th>`;
+    for(let i=1; i<=31; i++) h += `<th class="day-col">${i}</th>`;
+    h += `<th class="center-text">TOTAL MES</th>`;
+    thead.innerHTML = h;
+
+    let grandTotal = 0;
+
+    appData.employees.forEach(emp => {
+        if (emp.role !== "Surveyor") return; // SOLO MUESTRA SURVEYORS
+        if (filter && !emp.name.includes(filter)) return;
+        if (!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(31).fill(null);
+
+        let mTotal = 0;
+        let cells = '';
+        for(let i=0; i < 31; i++) {
+            const rec = appData.records[period][emp.id][i];
+            if (rec && rec.span > 1) {
+                const amtNum = parseFloat(rec.amount) || 0;
+                mTotal += amtNum;
+                const tooltip = `💵 $${amtNum}\n🚢 Buque: ${rec.vessel || 'N/A'}\n📍 Muelle: ${rec.muelle || 'N/A'}\n⚓ Fondeo: ${rec.fondeo || 'N/A'}\n🛠️ Act: ${rec.activity || 'N/A'}\n⏱️ Horas: ${rec.hours}h\n📅 Días: ${rec.span}\n📝 Obs: ${rec.obs || ''}`;
+                
+                cells += `<td colspan="${rec.span}" class="data-cell merged-cell" style="background-color: #f3e8ff; border-right: 1px solid #d8b4fe;" data-tooltip="${tooltip}" onclick="selectCell(this)" ondblclick="openSurvEditor(${emp.id}, ${i})">${rec.obs?'<div class="obs-dot"></div>':''}<div style="font-size:0.8rem; color:#6b21a8;">$${amtNum}</div><div style="font-size:0.6rem; color:#7e22ce; overflow:hidden; white-space:nowrap; padding:0 2px;">${rec.vessel || 'Buque'}</div></td>`;
+                i += (rec.span - 1);
+            } else if (rec && rec.linked) {
+                cells += `<td class="data-cell" style="background:#f8fafc;">-</td>`;
+            } else {
+                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
+                mTotal += amt;
+                cells += `<td class="data-cell day-col ${amt>0?'has-data':''}" onclick="selectCell(this)" ondblclick="openSurvEditor(${emp.id}, ${i})">${(rec&&rec.obs)?'<div class="obs-dot"></div>':''}${amt>0?amt:''}</td>`;
+            }
+        }
+        grandTotal += mTotal;
+        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+
+        const tr = document.createElement('tr');
+        if (emp.status === "Fuera de Servicio") tr.className = 'inactive-row';
+        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem; color:#6b21a8;">${emp.name}</div><div style="font-size:0.65rem; color:#64748b">${emp.role}</div></td>${cells}<td class="total-cell-month center-text" style="color:#6b21a8;">${mTotal}</td>`;
+        tbody.appendChild(tr);
+    });
+    document.getElementById('monthTotalSurv').innerText = grandTotal.toLocaleString();
+}
+
+function updateSurvHours() {
+    const startD = parseInt(document.getElementById('survStartDay').value) || 1;
+    const endD = parseInt(document.getElementById('survEndDay').value) || startD;
+    const days = Math.max(1, (endD - startD) + 1);
+    document.getElementById('survHours').value = days * 12; // 12h fijas multiplicadas por días
+}
+
+function checkSurvOther(type){
+    const sel = document.getElementById('surv'+type);
+    const inp = document.getElementById('surv'+type+'Other');
+    if(sel.value === 'OTRO') inp.classList.add('visible');
+    else inp.classList.remove('visible');
+}
+
+function getSurvSelectVal(id){
+    const sel = document.getElementById(id);
+    if(sel.value === 'OTRO') return document.getElementById(id+'Other').value.toUpperCase();
+    return sel.value;
+}
+
+function closeSurvEditor() { document.getElementById('surveyorEditorModal').classList.remove('open'); }
+
+function openSurvEditor(eid, dix) {
+    currentEdit = { empId: eid, dayIdx: dix };
+    const p = document.getElementById('monthSelectorSurv').value;
+    const emp = appData.employees.find(e => e.id == eid);
+    const rec = appData.records[p][eid][dix];
+    
+    document.getElementById('survModalTitle').innerText = `Registro: ${emp.name}`;
+    
+    let start = dix + 1; let end = dix + 1; 
+    let val = rec ? (parseFloat(rec.amount)||'') : 1400; // $1400 por defecto
+    if (rec && rec.span > 1) { end = start + rec.span - 1; }
+    
+    document.getElementById('survStartDay').value = start;
+    document.getElementById('survEndDay').value = end;
+    document.getElementById('survAmount').value = val;
+    document.getElementById('survVessel').value = rec ? (rec.vessel || '') : '';
+    document.getElementById('survObs').value = rec ? (rec.obs || '') : '';
+    
+    // Restaurar listas
+    const muelleOpts = ["Sidor", "Venalum", "Copal", "Fmo", "Bauxilum", "Punta de Piedras", "N/A"];
+    const fondeoOpts = ["Milla 44", "Boca de Serpiente", "N/A"];
+    const actOpts = ["Draft Survey a buque", "Draft Survey a Gabarra(s)", "Bunker Survey", "Full Condition Survey", "Tecnico a Bordo", "Instalacion de termocuplas"];
+    
+    fillSelectOther('survMuelle', muelleOpts, rec ? rec.muelle : '');
+    fillSelectOther('survFondeo', fondeoOpts, rec ? rec.fondeo : '');
+    fillSelectOther('survActivity', actOpts, rec ? rec.activity : '');
+    
+    // Restaurar horas o calcular nuevas
+    if (rec && rec.hours !== undefined) {
+        document.getElementById('survHours').value = rec.hours;
+    } else {
+        updateSurvHours();
+    }
+
+    document.getElementById('surveyorEditorModal').classList.add('open');
+}
+
+function saveSurveyorEditor() {
+    const startD = parseInt(document.getElementById('survStartDay').value);
+    const endD = parseInt(document.getElementById('survEndDay').value);
+    const amount = parseFloat(document.getElementById('survAmount').value);
+    const hours = parseFloat(document.getElementById('survHours').value) || 0;
+    const p = document.getElementById('monthSelectorSurv').value;
+    
+    if (endD > 31) { alert("⚠️ ERROR: El mes termina el día 31."); return; }
+    if (endD < startD) { alert("⚠️ ERROR: Fecha final menor a inicial."); return; }
+
+    let userRow = appData.records[p][currentEdit.empId];
+    if (!userRow) { userRow = Array(31).fill(null); } 
+    else if (userRow.length < 31) { while (userRow.length < 31) { userRow.push(null); } }
+    appData.records[p][currentEdit.empId] = userRow;
+
+    const oldRec = userRow[currentEdit.dayIdx];
+    const oldSpan = oldRec ? (oldRec.span || 1) : 1;
+    for(let d=0; d<oldSpan; d++) { if(currentEdit.dayIdx + d < 31) userRow[currentEdit.dayIdx + d] = null; }
+
+    const span = endD - startD + 1;
+    for(let d=startD; d<=endD; d++) { userRow[d-1] = null; } 
+    
+    if (amount > 0) {
+        const survData = { 
+            role: "Surveyor",
+            vessel: document.getElementById('survVessel').value.toUpperCase(),
+            muelle: getSurvSelectVal('survMuelle'),
+            fondeo: getSurvSelectVal('survFondeo'),
+            activity: getSurvSelectVal('survActivity'),
+            obs: document.getElementById('survObs').value,
+            hours: hours,
+            isPhantom: false 
+        };
+        userRow[startD-1] = { amount: amount, span: span, ...survData };
+        for(let k=1; k < span; k++) { userRow[startD-1+k] = { amount: 0, linked: true, span: 0, ...survData }; }
+    }
+    save(); closeSurvEditor(); renderSurveyorTable(p);
+}
+
+function deleteSurveyorRecord() {
+    if (!confirm("⚠️ ¿Estás seguro de querer BORRAR este registro?")) return;
+    const p = document.getElementById('monthSelectorSurv').value;
+    const startD = parseInt(document.getElementById('survStartDay').value) - 1;
+    const oldRec = appData.records[p][currentEdit.empId][startD];
+    const oldSpan = oldRec ? (oldRec.span || 1) : 1;
+    for(let i = 0; i < oldSpan; i++) { if(startD + i < 31) { appData.records[p][currentEdit.empId][startD + i] = null; } }
+    save(); closeSurvEditor(); renderSurveyorTable(p);
+    showToast("🗑️ Registro eliminado");
+}
+function exportSurveyorsToExcel() {
+    const p = document.getElementById('monthSelectorSurv').value;
+    
+    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
+    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
+    
+    html += '<thead style="background-color: #f3e8ff;"><tr>';
+    html += '<th style="font-weight:bold; width: 200px;">SURVEYOR</th>';
+    for (let i = 1; i <= 31; i++) { html += `<th style="font-weight:bold;">${i}</th>`; }
+    html += '<th style="font-weight:bold;">TOTAL MES</th>';
+    html += '<th style="font-weight:bold;">HORAS MES</th>';
+    html += '</tr></thead><tbody>';
+
+    let rowIndex = 2; 
+
+    appData.employees.forEach(emp => {
+        if (emp.role !== "Surveyor") return;
+        
+        const filter = document.getElementById('searchSurveyor').value.toUpperCase();
+        if (filter && !emp.name.includes(filter)) return;
+
+        let mTotal = 0; let mHours = 0;
+        let cells = '';
+        const userRecs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
+
+        for (let i = 0; i < 31; i++) {
+            const rec = userRecs[i];
+            if (rec && rec.span > 1) {
+                const amtNum = parseFloat(rec.amount) || 0;
+                const hrsNum = parseFloat(rec.hours) || 0;
+                mTotal += amtNum;
+                mHours += hrsNum;
+                
+                const cellText = `$${amtNum} - ${rec.vessel || ''} (${rec.activity || ''})`;
+                cells += `<td colspan="${rec.span}" style="text-align:center; background-color: #f3e8ff;">${cellText}</td>`;
+                i += (rec.span - 1);
+            } else if (rec && rec.linked) {
+                // Absorbido
+            } else {
+                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
+                const hrs = rec ? (parseFloat(rec.hours) || 0) : 0;
+                mTotal += amt;
+                mHours += hrs;
+                
+                cells += `<td style="text-align:center;" ${amt > 0 ? 'x:num' : ''}>${amt > 0 ? amt : ''}</td>`;
+            }
+        }
+
+        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+
+        html += `<tr>
+            <td><b>${emp.name}</b></td>
+            ${cells}
+            <td style="text-align:center; font-weight:bold; background-color:#f8fafc; color:#6b21a8;" x:num x:fmla="=SUM(B${rowIndex}:AF${rowIndex})">${mTotal}</td>
+            <td style="text-align:center; font-weight:bold;" x:num>${mHours}</td>
+        </tr>`;
+        
+        rowIndex++;
+    });
+
+    html += '</tbody></table></body></html>';
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    
+    document.body.appendChild(downloadLink);
+    downloadLink.href = url;
+    downloadLink.download = `Surveyors_${p}.xls`;
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+}
 async function downloadData(){const str=JSON.stringify(appData);try{const handle=await window.showSaveFilePicker({suggestedName:'icg_backup.json',types:[{description:'JSON File',accept:{'application/json':['.json']}}]});const writable=await handle.createWritable();await writable.write(str);await writable.close();}catch(err){if(err.name!=='AbortError'){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(str);a.download="icg_backup_v1.0.json";document.body.appendChild(a);a.click();a.remove();}}setDirty(false);}
 
 function changeDistance(id, newDist){
