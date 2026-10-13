@@ -279,8 +279,23 @@ function renderTable(period) {
     let grandTotal = 0; const currentYear = period.split(' ')[1];
 
     appData.employees.forEach(emp => {
-        if (emp.role === "Surveyor") return; // <--- NUEVA LÍNEA: Oculta a los surveyors de aquí
-        if(filter && !emp.name.includes(filter)) return;
+        if (emp.role === "Surveyor") return; // Oculta a los surveyors de esta vista
+        
+        if (filter) {
+            const nameMatch = emp.name.toUpperCase().includes(filter);
+            const roleMatch = emp.role.toUpperCase().includes(filter);
+            
+            const userRecs = (appData.records[period] && appData.records[period][emp.id]) || [];
+            const recordMatch = userRecs.some(rec => {
+                if (!rec) return false;
+                const actMatch = rec.activity && rec.activity.toUpperCase().includes(filter);
+                const siteMatch = (rec.site || rec.location || rec.muelle) && 
+                                  (rec.site || rec.location || rec.muelle).toUpperCase().includes(filter);
+                return actMatch || siteMatch;
+            });
+
+            if (!nameMatch && !roleMatch && !recordMatch) return;
+        }
         if(!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(DAYS_IN_MONTH).fill(null);
         let mTotal = 0; 
         let cells = '';
