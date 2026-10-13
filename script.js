@@ -189,10 +189,15 @@ function syncMonths(val) {
     document.getElementById('monthSelector').value = val;
     document.getElementById('monthSelectorSug').value = val;
     if(document.getElementById('monthSelectorSurv')) document.getElementById('monthSelectorSurv').value = val;
-    
+    if(document.getElementById('monthSelectorTrans')) document.getElementById('monthSelectorTrans').value = val;
     handleMonthChange();
     if (document.getElementById('tab-sugerencias').classList.contains('active')) renderSuggestions();
     if (document.getElementById('tab-surveyors').classList.contains('active')) renderSurveyorTable(val);
+    if (document.getElementById('tab-transporte').classList.contains('active')) renderTransportTable(val);
+    
+    if (document.getElementById('tab-transporte').classList.contains('active')) {
+    updateTransDateRange();
+}
 }
 
 function closeEditor() { document.getElementById('cellEditorModal').classList.remove('open'); }
@@ -222,6 +227,14 @@ function switchTab(tab) {
         renderSurveyorTable(selSurv.value);
     }
     if(tab === 'registro') initQuickEntry();
+    if(tab === 'transporte') {
+        const selTrans = document.getElementById('monthSelectorTrans');
+        if(selTrans && selTrans.options.length === 0) {
+            selTrans.innerHTML = document.getElementById('monthSelector').innerHTML;
+            selTrans.value = document.getElementById('monthSelector').value;
+        }
+        renderTransportTable(selTrans.value);
+    }
 }
 
 function handleMonthChange() {
@@ -869,7 +882,100 @@ function changeStatus(id,newStatus){const emp=appData.employees.find(e=>e.id==id
 function changeRole(id,newRole){const emp=appData.employees.find(e=>e.id==id);if(emp){emp.role=newRole;save();renderConfigLists();renderSuggestions();renderAllCharts();renderAnalytics();}}
 function setAllAvailable(){if(!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?"))return;appData.employees.forEach(e=>e.status="Disponible");save();renderConfigLists();renderSuggestions();alert("Todo el personal está ahora disponible.");}
 function deleteEmployee(id){if(confirm('¿Eliminar empleado? Esto borrará su historial.')){appData.employees=appData.employees.filter(e=>e.id!==id);save();renderConfigLists();}}
-function exportToExcel(){const table=document.getElementById('payrollTable');const p=document.getElementById('monthSelector').value;const html=table.outerHTML;const url='data:application/vnd.ms-excel;charset=utf-8,'+encodeURIComponent(html);const downloadLink=document.createElement("a");document.body.appendChild(downloadLink);downloadLink.href=url;downloadLink.download=`Nomina_${p}.xls`;downloadLink.click();document.body.removeChild(downloadLink);}
+function exportToExcel() {
+    const p = document.getElementById('monthSelector').value;
+    const currentYear = p.split(' ')[1];
+    
+    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
+    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
+    
+    html += '<thead style="background-color: #f8fafc;"><tr>';
+    html += '<th style="font-weight:bold; width: 200px;">EMPLEADO</th>';
+    for (let i = 1; i <= 31; i++) { html += `<th style="font-weight:bold;">${i}</th>`; }
+    html += '<th style="font-weight:bold;">TOTAL MES</th>';
+    html += '<th style="font-weight:bold;">ACUM. ANUAL</th>';
+    html += '<th style="font-weight:bold;">HORAS MES</th>';
+    html += '<th style="font-weight:bold;">HORAS AÑO</th>';
+    html += '</tr></thead><tbody>';
+
+    let rowIndex = 2; 
+
+    appData.employees.forEach(emp => {
+        const filter = document.getElementById('searchPayroll').value.toUpperCase();
+        if (filter && !emp.name.includes(filter)) return;
+
+        let mTotal = 0; let mHours = 0;
+        let cells = '';
+        const userRecs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
+
+        for (let i = 0; i < 31; i++) {
+            const rec = userRecs[i];
+            if (rec && rec.span > 1) {
+                const amtNum = parseFloat(rec.amount) || 0;
+                const hrsNum = parseFloat(rec.hours) || 0;
+                if (!rec.isPhantom) {
+                    mTotal += amtNum;
+                    mHours += hrsNum;
+                }
+                
+                const cellText = rec.isPhantom ? "X" : amtNum;
+                cells += `<td colspan="${rec.span}" style="text-align:center; background-color: #e2e8f0;" x:num>${cellText}</td>`;
+                i += (rec.span - 1);
+            } else if (rec && rec.linked) {
+            
+            } else {
+                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
+                const hrs = rec ? (parseFloat(rec.hours) || 0) : 0;
+                if (!rec || !rec.isPhantom) {
+                    mTotal += amt;
+                    mHours += hrs;
+                }
+                
+                let text = "";
+                if (rec && rec.isPhantom) text = "X";
+                else if (amt > 0) text = amt;
+                
+                cells += `<td style="text-align:center;" x:num>${text}</td>`;
+            }
+        }
+
+        let yTotal = 0; let yHours = 0;
+        PERIODS.filter(x => x.includes(currentYear)).forEach(x => {
+            if (appData.records[x] && appData.records[x][emp.id]) {
+                appData.records[x][emp.id].forEach(r => {
+                    if (r && !r.isPhantom && (parseFloat(r.amount) > 0)) {
+                        yTotal += parseFloat(r.amount) || 0;
+                        yHours += parseFloat(r.hours) || 0;
+                    }
+                });
+            }
+        });
+
+        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+        html += `<tr>
+            <td><b>${emp.name}</b> - ${emp.role}</td>
+            ${cells}
+            <td style="text-align:center; font-weight:bold; background-color:#f8fafc;" x:num x:fmla="=SUM(B${rowIndex}:AF${rowIndex})">${mTotal}</td>
+            <td style="text-align:center; font-weight:bold; color: #16a34a;" x:num>${yTotal}</td>
+            <td style="text-align:center; font-weight:bold;" x:num>${mHours}</td>
+            <td style="text-align:center; font-weight:bold; color: #16a34a;" x:num>${yHours}</td>
+        </tr>`;
+        
+        rowIndex++;
+    });
+
+    html += '</tbody></table></body></html>';
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    
+    document.body.appendChild(downloadLink);
+    downloadLink.href = url;
+    downloadLink.download = `Nomina_${p}.xls`;
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+}
 /* =========================================
    LÓGICA EXCLUSIVA PARA SURVEYORS
 ========================================= */
@@ -1105,6 +1211,244 @@ function exportSurveyorsToExcel() {
     downloadLink.click();
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
+}
+/* =========================================
+   LÓGICA EXCLUSIVA PARA TRANSPORTE
+========================================= */
+
+const FLOTA = {
+    "Mitsubishi Touring": ["AH288BA"],
+    "Daihatsu Terios": ["FBH01N"], 
+    "Chevrolet Aveo": ["AC549NM"], 
+    "Terios Bego": ["AA455DB"], 
+    "Jeep Cherokee": ["AE693JM"],
+    "Hyunday Getz": ["AA550JB"]
+};
+const CHOFERES_BASE = ["Eduardo Marchán", "Jonny Flores", "Julissa Peña", "Diojene Beltran", "Luis Beecker"];
+function autoFillPlaca() {
+    const v = document.getElementById('transVehiculo').value.trim();
+    const p = document.getElementById('transPlaca');
+    const dl = document.getElementById('placasList');
+    dl.innerHTML = ''; 
+    if(FLOTA[v]){
+        if(FLOTA[v].length === 1) p.value = FLOTA[v][0]; 
+        else { p.value = ''; FLOTA[v].forEach(pl => { dl.innerHTML += `<option value="${pl}">`; }); }
+    }
+}
+
+// NUEVO: Ajusta las fechas "Desde y Hasta" automáticamente si cambias el Mes global
+function updateTransDateRange() {
+    const p = document.getElementById('monthSelectorTrans').value; 
+    if(!p) return;
+    const [mesStr, year] = p.split(' ');
+    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const monthIdx = meses.indexOf(mesStr);
+    
+    if(monthIdx >= 0) {
+        const firstDay = new Date(year, monthIdx, 1);
+        const lastDay = new Date(year, monthIdx + 1, 0);
+        document.getElementById('transDateFrom').value = firstDay.toISOString().split('T')[0];
+        document.getElementById('transDateTo').value = lastDay.toISOString().split('T')[0];
+        renderTransportTable();
+    }
+}
+
+// NUEVO: Extrae todos los viajes de la base de datos sin importar el mes
+function getAllTransportRecords() {
+    let todos = [];
+    if(!appData.transporte) return todos;
+    Object.keys(appData.transporte).forEach(mesKey => {
+        appData.transporte[mesKey].forEach((viaje, idx) => {
+            todos.push({ ...viaje, mesOriginal: mesKey, idOriginal: idx });
+        });
+    });
+    // Ordenar por fecha cronológicamente
+    return todos.sort((a, b) => new Date(a.fecha_raw) - new Date(b.fecha_raw));
+}
+
+function renderTransportTable() {
+    const tbody = document.getElementById('tableBodyTrans');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    
+    const filter = document.getElementById('searchTransport').value.toUpperCase();
+    const fromDate = document.getElementById('transDateFrom').value;
+    const toDate = document.getElementById('transDateTo').value;
+    let total = 0;
+
+    const viajesFiltrados = getAllTransportRecords().filter(v => {
+        if (fromDate && v.fecha_raw < fromDate) return false;
+        if (toDate && v.fecha_raw > toDate) return false;
+        const matchText = `${v.chofer} ${v.placa} ${v.vehiculo} ${v.detalles}`.toUpperCase();
+        if (filter && !matchText.includes(filter)) return false;
+        return true;
+    });
+
+    viajesFiltrados.forEach(viaje => {
+        total += parseFloat(viaje.monto) || 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="text-align:center;">${viaje.fecha}</td>
+            <td style="text-align:center;">${viaje.hora}</td>
+            <td>${viaje.chofer}</td>
+            <td style="text-align:center; font-weight:bold;">${viaje.placa}</td>
+            <td>${viaje.vehiculo}</td>
+            <td>${viaje.detalles}</td>
+            <td style="text-align:center; font-weight:bold; color: #16a34a;">$${viaje.monto}</td>
+            <td style="text-align:center;">
+                <button class="compact-btn" style="background:#f59e0b;" onclick="openTransportEditor('${viaje.mesOriginal}', ${viaje.idOriginal})">✏️ Editar</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    document.getElementById('monthTotalTrans').innerText = total.toLocaleString();
+}
+
+function openTransportEditor(mesOriginal = null, idx = -1) {
+    document.getElementById('transEditIndex').value = idx;
+    document.getElementById('transEditMonth').value = mesOriginal || '';
+    
+    const dChofer = document.getElementById('choferesList');
+    const dVehiculo = document.getElementById('vehiculosList');
+    dChofer.innerHTML = ''; dVehiculo.innerHTML = '';
+    Object.keys(FLOTA).forEach(v => dVehiculo.innerHTML += `<option value="${v}">`);
+    
+    let choferesUnicos = new Set(CHOFERES_BASE);
+    getAllTransportRecords().forEach(v => choferesUnicos.add(v.chofer));
+    choferesUnicos.forEach(c => dChofer.innerHTML += `<option value="${c}">`);
+
+    if (idx >= 0 && mesOriginal) {
+        document.getElementById('transModalTitle').innerText = "Editar Viaje";
+        document.getElementById('btnDeleteTrans').style.display = 'inline-block';
+        const v = appData.transporte[mesOriginal][idx];
+        document.getElementById('transChofer').value = v.chofer;
+        document.getElementById('transVehiculo').value = v.vehiculo;
+        document.getElementById('transPlaca').value = v.placa;
+        document.getElementById('transFecha').value = v.fecha_raw || '';
+        document.getElementById('transHora').value = v.hora_raw || '';
+        document.getElementById('transDetalles').value = v.detalles;
+        document.getElementById('transMonto').value = v.monto;
+    } else {
+        document.getElementById('transModalTitle').innerText = "Nuevo Viaje";
+        document.getElementById('btnDeleteTrans').style.display = 'none';
+        document.getElementById('transChofer').value = '';
+        document.getElementById('transVehiculo').value = '';
+        document.getElementById('transPlaca').value = '';
+        const today = new Date();
+        document.getElementById('transFecha').value = today.toISOString().split('T')[0];
+        document.getElementById('transHora').value = today.toTimeString().slice(0,5);
+        document.getElementById('transDetalles').value = '';
+        document.getElementById('transMonto').value = '';
+    }
+    document.getElementById('transportEditorModal').classList.add('open');
+}
+
+function closeTransportEditor() { document.getElementById('transportEditorModal').classList.remove('open'); }
+
+// NUEVO: Identifica a qué mes pertenece la fecha seleccionada para guardar el registro donde debe ir
+function getPeriodBucket(dateStr) {
+    const [year, month, day] = dateStr.split('-');
+    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    return `${meses[parseInt(month)-1]} ${year}`;
+}
+
+function saveTransportRecord() {
+    const f_raw = document.getElementById('transFecha').value;
+    if(!f_raw) { alert("⚠️ Debe indicar la fecha."); return; }
+
+    const bucketPeriod = getPeriodBucket(f_raw);
+    if (!appData.transporte) appData.transporte = {};
+    if (!appData.transporte[bucketPeriod]) appData.transporte[bucketPeriod] = [];
+
+    const idx = parseInt(document.getElementById('transEditIndex').value);
+    const originalMonth = document.getElementById('transEditMonth').value;
+    const h_raw = document.getElementById('transHora').value;
+    
+    const [year, month, day] = f_raw.split('-');
+    const fechaFmt = `${day}/${month}/${year}`;
+    let horaFmt = h_raw;
+    if (h_raw) {
+        let [hh, mm] = h_raw.split(':');
+        let h = parseInt(hh); let ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12; if (h === 0) h = 12;
+        horaFmt = `${h.toString().padStart(2, '0')}:${mm}${ampm}`;
+    }
+
+    const viaje = {
+        chofer: document.getElementById('transChofer').value.trim(),
+        vehiculo: document.getElementById('transVehiculo').value.trim(),
+        placa: document.getElementById('transPlaca').value.trim(),
+        fecha: fechaFmt, fecha_raw: f_raw,
+        hora: horaFmt, hora_raw: h_raw,
+        detalles: document.getElementById('transDetalles').value.trim(),
+        monto: parseFloat(document.getElementById('transMonto').value) || 0
+    };
+
+    if (idx >= 0 && originalMonth) {
+        if (originalMonth === bucketPeriod) {
+            appData.transporte[bucketPeriod][idx] = viaje; // Se quedó en el mismo mes
+        } else {
+            appData.transporte[originalMonth].splice(idx, 1); // Lo borra del mes viejo
+            appData.transporte[bucketPeriod].push(viaje); // Lo mueve al mes nuevo
+        }
+    } else {
+        appData.transporte[bucketPeriod].push(viaje);
+    }
+
+    save(); closeTransportEditor(); renderTransportTable();
+}
+
+function deleteTransportRecord() {
+    if(!confirm("⚠️ ¿Eliminar este viaje?")) return;
+    const idx = parseInt(document.getElementById('transEditIndex').value);
+    const originalMonth = document.getElementById('transEditMonth').value;
+    appData.transporte[originalMonth].splice(idx, 1);
+    save(); closeTransportEditor(); renderTransportTable();
+}
+
+function exportTransportToExcel() {
+    const fromDate = document.getElementById('transDateFrom').value;
+    const toDate = document.getElementById('transDateTo').value;
+    
+    // Filtramos exactamente los viajes que están en la tabla actualmente
+    const viajesFiltrados = getAllTransportRecords().filter(v => {
+        if (fromDate && v.fecha_raw < fromDate) return false;
+        if (toDate && v.fecha_raw > toDate) return false;
+        return true;
+    });
+    
+    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
+    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
+    html += '<thead style="background-color: #f1f5f9;"><tr>';
+    html += '<th style="font-weight:bold;">VEHICULO</th><th style="font-weight:bold;">PLACA</th>';
+    html += '<th style="font-weight:bold;">CHOFER</th><th style="font-weight:bold;">OPERACION</th>';
+    html += '<th style="font-weight:bold;">FECHA</th><th style="font-weight:bold;">HORA</th>';
+    html += '<th style="font-weight:bold; width: 300px;">DETALLES DEL SERVICIO</th><th style="font-weight:bold;">MONTO</th>';
+    html += '</tr></thead><tbody>';
+
+    let mTotal = 0; let rowIndex = 2;
+    viajesFiltrados.forEach(v => {
+        const amt = parseFloat(v.monto) || 0;
+        mTotal += amt;
+        html += `<tr>
+            <td>${v.vehiculo}</td><td>${v.placa}</td><td>${v.chofer}</td><td>Transporte</td>
+            <td style="text-align:center;">${v.fecha}</td><td style="text-align:center;">${v.hora}</td>
+            <td>${v.detalles}</td><td style="text-align:center;" x:num>${amt}</td>
+        </tr>`;
+        rowIndex++;
+    });
+
+    html += `<tr><td colspan="7" style="text-align:right; font-weight:bold;">TOTAL</td><td style="font-weight:bold; background-color:#f1f5f9;" x:num x:fmla="=SUM(H2:H${rowIndex-1})">${mTotal}</td></tr>`;
+    html += '</tbody></table></body></html>';
+
+    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    document.body.appendChild(link);
+    // Cambiamos el nombre para indicar que puede ser una semana cruzada
+    const nombreExcel = `Transporte_${fromDate}_al_${toDate}.xls`;
+    link.href = url; link.download = nombreExcel;
+    link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 async function downloadData(){const str=JSON.stringify(appData);try{const handle=await window.showSaveFilePicker({suggestedName:'icg_backup.json',types:[{description:'JSON File',accept:{'application/json':['.json']}}]});const writable=await handle.createWritable();await writable.write(str);await writable.close();}catch(err){if(err.name!=='AbortError'){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(str);a.download="icg_backup_v1.0.json";document.body.appendChild(a);a.click();a.remove();}}setDirty(false);}
 

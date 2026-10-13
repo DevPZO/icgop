@@ -60,6 +60,7 @@
             </button>
             <button class="nav-btn" id="nav-nomina" onclick="switchTab('nomina')">📅 Nómina</button>
             <button class="nav-btn" id="nav-surveyors" onclick="switchTab('surveyors')">🚢 Surveyors</button>
+            <button class="nav-btn" id="nav-transporte" onclick="switchTab('transporte')">🚐 Transporte</button>
             <button class="nav-btn" id="nav-registro" onclick="switchTab('registro')">📝 Reg. Rápido</button>
             <button class="nav-btn" id="nav-sugerencias" onclick="switchTab('sugerencias')">💡 Sugerencias</button>
             <button class="nav-btn" id="nav-graficos" onclick="switchTab('graficos')">📈 Gráficos</button>
@@ -179,6 +180,51 @@
                 <div class="table-wrapper">
                     <table id="surveyorTable"><thead><tr id="tableHeaderSurv"></tr></thead><tbody id="tableBodySurv"></tbody></table>
                 </div>
+            </section>
+            <!-- NUEVA PESTAÑA: TRANSPORTE -->
+            <section id="tab-transporte" class="view-section">
+                
+                <div class="toolbar">
+                    <div class="toolbar-group">
+                        <label><strong>Mes:</strong></label>
+                        <select id="monthSelectorTrans" class="compact-input period-selector" onchange="syncMonths(this.value); updateTransDateRange();"></select>
+                        
+                        <label style="margin-left: 15px;"><strong>Semana / Rango:</strong> Desde</label>
+                        <input type="date" id="transDateFrom" class="compact-input" onchange="renderTransportTable()">
+                        <label>Hasta</label>
+                        <input type="date" id="transDateTo" class="compact-input" onchange="renderTransportTable()">
+                    </div>
+                    
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchTransport" class="search-input" placeholder="Buscar chofer, placa..." onkeyup="renderTransportTable()">
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <button class="btn-save" onclick="openTransportEditor()">+ Añadir Viaje</button>
+                        <div id="monthlyTotalDisplayTrans"><span>Total: <strong id="monthTotalTrans" class="total-highlight">0</strong></span></div>
+                        <button class="compact-btn btn-excel" onclick="exportTransportToExcel()">📊 Exportar Excel</button>
+                    </div>
+                </div>
+                
+                <div class="table-wrapper">
+                    <table id="transportTable">
+                        <thead>
+                            <tr>
+                                <th>FECHA</th>
+                                <th>HORA</th>
+                                <th>CHOFER</th>
+                                <th>PLACA</th>
+                                <th>VEHÍCULO</th>
+                                <th>DETALLES DEL SERVICIO</th>
+                                <th>MONTO</th>
+                                <th>ACCIONES</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBodyTrans"></tbody>
+                    </table>
+                </div>
+
             </section>
             <section id="tab-sugerencias" class="view-section">
                 <div class="toolbar space-between">
@@ -409,6 +455,56 @@
                 
                 <button class="btn-save" onclick="saveSurveyorEditor()">GUARDAR CAMBIOS</button>
                 <button class="btn-cancel" onclick="closeSurvEditor()">Cancelar</button>
+            </div>
+        </div>
+        <!-- NUEVO MODAL PARA TRANSPORTE -->
+        <div class="modal-overlay" id="transportEditorModal">
+            <div class="editor-box" style="width: 450px;">
+                <h4 class="modal-header-title" id="transModalTitle">Registro de Viaje</h4>
+                <input type="hidden" id="transEditIndex" value="-1">
+                <input type="hidden" id="transEditMonth" value="">
+                
+                <div class="form-row-split">
+                    <div class="form-group">
+                        <label class="form-label">Chofer</label>
+                        <!-- Usamos un datalist para sugerir nombres repetidos -->
+                        <input type="text" id="transChofer" class="form-control" list="choferesList" placeholder="Ej: Eduardo Marchán">
+                        <datalist id="choferesList"></datalist>
+                    </div>
+                  <div class="form-group">
+                        <label class="form-label">Vehículo</label>
+                        <input type="text" id="transVehiculo" class="form-control" list="vehiculosList" placeholder="Ej: Mitsubishi Touring" oninput="autoFillPlaca()">
+                        <datalist id="vehiculosList"></datalist>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Placa</label>
+                    <input type="text" id="transPlaca" class="form-control" list="placasList" placeholder="Se llena automático...">
+                    <datalist id="placasList"></datalist>
+                </div>
+                
+                <div class="modal-action-group" style="margin-top: 10px;">
+                    <button class="compact-btn btn-modal-delete" id="btnDeleteTrans" onclick="deleteTransportRecord()" style="display:none;">🗑️ Borrar Viaje</button>
+                </div>
+
+                <div class="form-row-split">
+                    <div class="form-group"><label class="form-label">Fecha</label><input type="date" id="transFecha" class="form-control"></div>
+                    <div class="form-group"><label class="form-label">Hora</label><input type="time" id="transHora" class="form-control"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Detalles del Servicio</label>
+                    <textarea id="transDetalles" class="form-control" rows="2" placeholder="Ej: Traslado del personal Diurno a Venalum."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Monto ($)</label>
+                    <input type="number" id="transMonto" class="form-control" value="0">
+                </div>
+                
+                <button class="btn-save" onclick="saveTransportRecord()">GUARDAR VIAJE</button>
+                <button class="btn-cancel" onclick="closeTransportEditor()">Cancelar</button>
             </div>
         </div>
         <div class="modal-overlay" id="baseModal">
