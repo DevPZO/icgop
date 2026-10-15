@@ -1,0 +1,77 @@
+/* =========================================================
+   mejoras.css  —  se carga DESPUÉS de styles.css (lo inyecta script.js).
+   No reemplaza nada: solo añade y corrige. Si algo no te gusta,
+   borra el bloque correspondiente y vuelve al estilo original.
+========================================================= */
+
+/* --- Accesibilidad: foco visible por teclado --- */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .legend-item:focus-visible {
+    outline: 2px solid #1d4ed8; outline-offset: 2px;
+}
+
+/* --- Contraste: texto oscuro sobre naranja (el blanco daba ~2.3:1) --- */
+.btn-save:not([style*="background"]), .btn-add, .bar-fill { color: #1f2937; }
+.btn-save:not([style*="background"]):hover, .btn-add:hover { filter: brightness(0.95); }
+
+/* --- Tooltips de celdas (antes no existía ningún estilo para data-tooltip) --- */
+#globalTooltip { position: fixed; white-space: pre-line; max-width: 320px; line-height: 1.35; }
+
+/* --- Toast de error --- */
+#toastNotif { max-width: 90vw; text-align: center; justify-content: center; }
+#toastNotif.error { background: #b91c1c; }
+
+/* --- Banner de modo protegido (falló la lectura de la nube) --- */
+.load-banner { background: #b91c1c; color: #fff; padding: 8px 14px; font-size: 0.85rem; font-weight: 600; text-align: center; }
+
+/* --- Login --- */
+.link-btn { background: none; border: none; color: #475569; text-decoration: underline; cursor: pointer; font-size: 0.8rem; margin-top: 12px; }
+.link-btn:hover { color: var(--accent); }
+
+/* --- Nómina: días de la semana, fines de semana y días inexistentes --- */
+th .wk { font-size: 0.55rem; font-weight: 500; color: #94a3b8; line-height: 1; }
+th.day-weekend { background: #f1f5f9; color: #b45309; }
+td.wk-end:not(.has-data):not(.merged-cell):not(.phantom-cell) { background: #fafaf9; }
+th.day-invalid, td.day-invalid {
+    background: repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 4px, #e2e8f0 4px, #e2e8f0 8px);
+    cursor: not-allowed; color: #cbd5e1;
+}
+.cell-amt { font-size: 0.8rem; }
+.cell-sub { font-size: 0.66rem; overflow: hidden; white-space: nowrap; padding: 0 2px; text-overflow: ellipsis; }
+.site-legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 1rem; background: #fff; border-bottom: 1px solid var(--border); font-size: 0.72rem; color: #475569; }
+.site-legend:empty { display: none; }
+.site-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.site-legend i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+
+/* --- Registro Rápido: filas (estos estilos faltaban) y proporción de columnas --- */
+#tab-registro .config-grid { grid-template-columns: minmax(300px, 1fr) 2fr; }
+#tab-registro .card-span-2 { grid-row: auto; }
+.qr-row { display: grid; grid-template-columns: 2fr 1.4fr 1.2fr 110px 36px; gap: 8px; align-items: center; }
+.qr-row .form-control { min-width: 0; }
+.qr-delete { height: 34px; background: #fee2e2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.qr-delete:hover { background: #fecaca; }
+@media (max-width: 1024px) { #tab-registro .config-grid { grid-template-columns: 1fr; } }
+@media (max-width: 768px) {
+    .qr-row { grid-template-columns: 1fr 1fr; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+    .qr-row .qr-emp-select { grid-column: 1 / -1; }
+}
+
+/* --- Gráficos --- */
+.chart-point { r: 4; }
+.chart-point:hover { r: 7; }
+
+/* --- Tarjetas gerenciales --- */
+.month-card .mom { font-size: 0.75rem; font-weight: 600; }
+.mom.up { color: #b45309; }
+.mom.down { color: #15803d; }
+.month-card .meta { font-size: 0.78rem; color: #64748b; margin-top: 4px; }
+.disp-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; table-layout: auto; }
+.disp-table th, .disp-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; position: static; }
+.disp-table th:first-child, .disp-table td:first-child { text-align: left; }
+.disp-note { font-size: 0.75rem; color: #64748b; margin-top: 8px; }
+
+/* --- Móvil: la barra de pestañas se desplaza en lugar de aplastarse (9 pestañas) --- */
+@media (max-width: 768px) {
+    .navbar { overflow-x: auto; justify-content: flex-start; }
+    .nav-btn { flex: 0 0 auto; min-width: 76px; }
+    .period-selector { width: 100% !important; }
+}
