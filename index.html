@@ -29,7 +29,7 @@
 
     <div id="mainApp" style="display: none;">
         <div id="printSection">
-        <h1 class="print-header-title" id="printHeaderTitle">REPORTE DE NÓMINA</h1>
+            <h1 class="print-header-title" id="printHeaderTitle">REPORTE DE NÓMINA</h1>
             <table class="print-table">
                 <thead>
                     <tr>
@@ -54,18 +54,18 @@
                 <div class="brand">ICG S.M.S.</div>
             </div>
             
-            <button class="nav-btn active" id="nav-config" onclick="switchTab('config')">
+            <button type="button" class="nav-btn active" id="nav-config" onclick="switchTab('config')">
                 ⚙️ Configuración
                 <div id="unsavedDot" class="unsaved-dot"></div>
             </button>
-            <button class="nav-btn" id="nav-nomina" onclick="switchTab('nomina')">📅 Nómina</button>
-            <button class="nav-btn" id="nav-surveyors" onclick="switchTab('surveyors')">🚢 Surveyors</button>
-            <button class="nav-btn" id="nav-transporte" onclick="switchTab('transporte')">🚐 Transporte</button>
-            <button class="nav-btn" id="nav-registro" onclick="switchTab('registro')">📝 Reg. Rápido</button>
-            <button class="nav-btn" id="nav-sugerencias" onclick="switchTab('sugerencias')">💡 Sugerencias</button>
-            <button class="nav-btn" id="nav-graficos" onclick="switchTab('graficos')">📈 Gráficos</button>
-            <button class="nav-btn" id="nav-analytics" onclick="switchTab('analytics')">📊 Gerencia</button>
-            <button class="nav-btn" onclick="logoutUser()" style="color: #fca5a5; margin-left: auto;">🚪 Salir</button>
+            <button type="button" class="nav-btn" id="nav-nomina" onclick="switchTab('nomina')">📅 Nómina</button>
+            <button type="button" class="nav-btn" id="nav-surveyors" onclick="switchTab('surveyors')">🚢 Surveyors</button>
+            <button type="button" class="nav-btn" id="nav-transporte" onclick="switchTab('transporte')">🚐 Transporte</button>
+            <button type="button" class="nav-btn" id="nav-registro" onclick="switchTab('registro')">📝 Reg. Rápido</button>
+            <button type="button" class="nav-btn" id="nav-sugerencias" onclick="switchTab('sugerencias')">💡 Sugerencias</button>
+            <button type="button" class="nav-btn" id="nav-graficos" onclick="switchTab('graficos')">📈 Gráficos</button>
+            <button type="button" class="nav-btn" id="nav-analytics" onclick="switchTab('analytics')">📊 Gerencia</button>
+            <button type="button" class="nav-btn" onclick="logoutUser()" style="color: #fca5a5; margin-left: auto;">🚪 Salir</button>
         </nav>
 
         <div class="content-area">
@@ -77,7 +77,7 @@
                             <h3>👥 Personal, Cargo y Estatus</h3>
                             <p class="card-desc">Gestiona aquí los ascensos de cargo y el estatus.</p>
                             
-                            <button onclick="setAllAvailable()" class="btn-liberar">♻️ Poner TODOS en Disponible</button>
+                            <button type="button" onclick="setAllAvailable()" class="btn-liberar">♻️ Poner TODOS en Disponible</button>
                             
                             <div class="input-group">
                                 <input type="text" id="newEmpName" placeholder="Nombre" class="compact-input flex-1">
@@ -88,26 +88,27 @@
                                     <option value="Surveyor">Surveyor</option>
                                 </select>
                                 <input type="number" id="newEmpDistance" placeholder="Dist (1-10)" min="1" max="10" class="compact-input distance-input" title="Distancia de residencia (1 = Cerca, 10 = Muy Lejos)">
-                                <button onclick="addEmployee()" class="compact-btn btn-add">+</button>
+                                <button type="button" onclick="addEmployee()" class="compact-btn btn-add">+</button>
                             </div>
                             <ul class="list-group" id="employeeList"></ul>
                         </div>
                         
                         <div class="card">
                             <h3>☁️ Sincronización a la Nube</h3>
-                            <p class="card-desc-small">Los datos ahora se guardan automáticamente en Firebase. Puedes respaldar de forma manual si lo deseas.</p>
-                            <button onclick="downloadData()" class="btn-data btn-download">⬇️ Descargar Respaldo JSON</button>
+                            <p class="card-desc-small">Los datos se guardan automáticamente en Firebase. Puedes respaldar o normalizar registros cuando lo requieras.</p>
+                            <button type="button" onclick="downloadData()" class="btn-data btn-download">⬇️ Descargar Respaldo JSON</button>
                             <input type="file" id="backupInput" class="hidden-input" onchange="loadBackup(this)">
-                            <button onclick="document.getElementById('backupInput').click()" class="btn-data btn-upload">📂 Cargar Respaldo y Subir a la Nube</button>
-                            <button onclick="inspectData()" class="btn-data btn-inspect">🔍 Ver qué hay en la Nube</button>
-                            <button onclick="openBaseModal()" class="btn-data btn-base">💰 Acumulados Previos (2025)</button>
+                            <button type="button" onclick="document.getElementById('backupInput').click()" class="btn-data btn-upload">📂 Cargar Respaldo y Subir a la Nube</button>
+                            <button type="button" onclick="inspectData()" class="btn-data btn-inspect">🔍 Ver qué hay en la Nube</button>
+                            <button type="button" onclick="normalizarSitiosHistoricos()" class="btn-data btn-inspect" style="background:#0284c7; color:white;">🧹 Normalizar Sitios Antiguos</button>
+                            <button type="button" onclick="openBaseModal()" class="btn-data btn-base">💰 Acumulados Previos (2025)</button>
                         </div>
 
                         <div class="card">
                             <h3>📍 Sitios</h3>
                             <div class="input-group">
                                 <input type="text" id="newSiteName" placeholder="Nuevo sitio" class="compact-input flex-1">
-                                <button onclick="addSite()" class="compact-btn btn-add">+</button>
+                                <button type="button" onclick="addSite()" class="compact-btn btn-add">+</button>
                             </div>
                             <ul class="list-group" id="siteList"></ul>
                         </div>
@@ -116,7 +117,7 @@
                             <h3>⚓ Actividades</h3>
                             <div class="input-group">
                                 <input type="text" id="newActivityName" placeholder="Nueva actividad" class="compact-input flex-1">
-                                <button onclick="addActivity()" class="compact-btn btn-add">+</button>
+                                <button type="button" onclick="addActivity()" class="compact-btn btn-add">+</button>
                             </div>
                             <ul class="list-group" id="activityList"></ul>
                         </div>
@@ -138,8 +139,8 @@
 
                     <div class="toolbar-group">
                         <div id="monthlyTotalDisplay"><span>Total: <strong id="monthTotal" class="total-highlight">0</strong></span></div>
-                        <button class="compact-btn btn-excel" onclick="exportToExcel()">📊 Exportar Excel</button>
-                        <button class="compact-btn btn-print" onclick="printPayroll()">🖨️ Imprimir</button>
+                        <button type="button" class="compact-btn btn-excel" onclick="exportToExcel()">📊 Exportar Excel</button>
+                        <button type="button" class="compact-btn btn-print" onclick="printPayroll()">🖨️ Imprimir</button>
                     </div>
                 </div>
                 
@@ -160,7 +161,7 @@
                     </div>
                 </div>
             </section>
-            <!-- NUEVA PESTAÑA: SURVEYORS -->
+
             <section id="tab-surveyors" class="view-section">
                 <div class="toolbar">
                     <div class="toolbar-group">
@@ -173,7 +174,7 @@
                     </div>
                     <div class="toolbar-group">
                         <div id="monthlyTotalDisplaySurv"><span>Total: <strong id="monthTotalSurv" class="total-highlight">0</strong></span></div>
-                        <button class="compact-btn btn-excel" onclick="exportSurveyorsToExcel()">📊 Exportar Excel</button>
+                        <button type="button" class="compact-btn btn-excel" onclick="exportSurveyorsToExcel()">📊 Exportar Excel</button>
                     </div>
                 </div>
                 
@@ -181,9 +182,8 @@
                     <table id="surveyorTable"><thead><tr id="tableHeaderSurv"></tr></thead><tbody id="tableBodySurv"></tbody></table>
                 </div>
             </section>
-            <!-- NUEVA PESTAÑA: TRANSPORTE -->
+
             <section id="tab-transporte" class="view-section">
-                
                 <div class="toolbar">
                     <div class="toolbar-group">
                         <label><strong>Mes:</strong></label>
@@ -201,9 +201,9 @@
                     </div>
                     
                     <div class="toolbar-group">
-                        <button class="btn-save" onclick="openTransportEditor()">+ Añadir Viaje</button>
+                        <button type="button" class="btn-save" onclick="openTransportEditor()">+ Añadir Viaje</button>
                         <div id="monthlyTotalDisplayTrans"><span>Total: <strong id="monthTotalTrans" class="total-highlight">0</strong></span></div>
-                        <button class="compact-btn btn-excel" onclick="exportTransportToExcel()">📊 Exportar Excel</button>
+                        <button type="button" class="compact-btn btn-excel" onclick="exportTransportToExcel()">📊 Exportar Excel</button>
                     </div>
                 </div>
                 
@@ -224,15 +224,15 @@
                         <tbody id="tableBodyTrans"></tbody>
                     </table>
                 </div>
-
             </section>
+
             <section id="tab-sugerencias" class="view-section">
                 <div class="toolbar space-between">
                     <div class="toolbar-group">
                         <label><strong>Periodo:</strong></label>
                         <select id="monthSelectorSug" class="compact-input period-selector" onchange="syncMonths(this.value)"></select>
                     </div>
-                    <button class="compact-btn btn-print" onclick="printSuggestions()">🖨️ Imprimir Reporte</button>
+                    <button type="button" class="compact-btn btn-print" onclick="printSuggestions()">🖨️ Imprimir Reporte</button>
                 </div>
                 <div class="dashboard-container">
                     <h2 class="section-title">💡 Asignación de Guardias</h2>
@@ -296,15 +296,14 @@
                         <div class="card card-span-2">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <h3 style="color:var(--accent);">2. Personal Asignado</h3>
-                                <button class="compact-btn btn-add" onclick="addQuickRow()">+ Agregar Persona</button>
+                                <button type="button" class="compact-btn btn-add" onclick="addQuickRow()">+ Agregar Persona</button>
                             </div>
                             
-                            <div id="quickEntryList" style="margin-top:15px; display:flex; flex-direction:column; gap:10px;">
-                                </div>
+                            <div id="quickEntryList" style="margin-top:15px; display:flex; flex-direction:column; gap:10px;"></div>
                             
-                            <button class="btn-save" style="margin-top:30px; font-size:1.1rem; padding:12px; background:#3b82f6; margin-bottom: 10px;" onclick="printQuickEntry()">🖨️ IMPRIMIR EN PDF</button>
+                            <button type="button" class="btn-save" style="margin-top:30px; font-size:1.1rem; padding:12px; background:#3b82f6; margin-bottom: 10px;" onclick="printQuickEntry()">🖨️ IMPRIMIR EN PDF</button>
 
-                            <button class="btn-save" style="margin-top:30px; font-size:1.1rem; padding:12px; background:#10b981;" onclick="saveQuickOperation()">💾 GUARDAR EN NÓMINA</button>
+                            <button type="button" class="btn-save" style="margin-top:30px; font-size:1.1rem; padding:12px; background:#10b981;" onclick="saveQuickOperation()">💾 GUARDAR EN NÓMINA</button>
                         </div>
                     </div>
                 </div>
@@ -361,16 +360,16 @@
                 <h4 class="modal-header-title" id="modalTitle">Registro</h4>
                 
                 <div class="modal-action-group">
-                    <button class="compact-btn btn-modal-action" onclick="copyRecord()">📋 Copiar</button>
-                    <button class="compact-btn btn-modal-action" onclick="pasteRecord()">📥 Pegar</button>
-                    <button class="compact-btn btn-modal-delete" onclick="deleteRecord()">🗑️ Borrar</button>
+                    <button type="button" class="compact-btn btn-modal-action" onclick="copyRecord()">📋 Copiar</button>
+                    <button type="button" class="compact-btn btn-modal-action" onclick="pasteRecord()">📥 Pegar</button>
+                    <button type="button" class="compact-btn btn-modal-delete" onclick="deleteRecord()">🗑️ Borrar</button>
                 </div>
 
                 <div class="form-row-split">
                     <div class="form-group"><label class="form-label">Desde día:</label><input type="number" id="editorStartDay" class="form-control input-readonly" readonly></div>
                     <div class="form-group"><label class="form-label">Hasta día:</label><input type="number" id="editorEndDay" class="form-control" min="1" max="31"></div>
                 </div>
-                <!-- NUEVO CAMPO: HORAS TRABAJADAS -->
+
                 <div class="form-group">
                     <label class="form-label">Horas Trabajadas (Calculadas)</label>
                     <input type="number" id="editorHours" class="form-control" placeholder="Ej: 72">
@@ -392,17 +391,26 @@
                 <div class="form-group"><label class="form-label">Actividad</label><select id="editorActivity" class="form-control" onchange="checkOther('Activity')"></select><input id="editorActivityOther" class="other-input form-control" placeholder="Especifique..."></div>
                 <div class="form-group"><label class="form-label">Observación / Incidencia</label><textarea id="editorObs" class="form-control" rows="2" placeholder="Ej: Lluvia 2h, Transporte demorado..."></textarea></div>
                 
-                <button class="btn-save" onclick="saveEditor()">GUARDAR CAMBIOS</button>
-                <button class="btn-cancel" onclick="closeEditor()">Cancelar</button>
+                <button type="button" class="btn-save" onclick="saveEditor()">GUARDAR CAMBIOS</button>
+                <button type="button" class="btn-cancel" onclick="closeEditor()">Cancelar</button>
             </div>
         </div>
-        <!-- NUEVO MODAL PARA SURVEYORS -->
+
         <div class="modal-overlay" id="surveyorEditorModal">
             <div class="editor-box" style="width: 400px;">
                 <h4 class="modal-header-title" id="survModalTitle">Registro Surveyor</h4>
                 
-                <div class="modal-action-group">
-                    <button class="compact-btn btn-modal-delete" onclick="deleteSurveyorRecord()">🗑️ Borrar</button>
+                <!-- FILA UNIFICADA DE ACCIONES EN EL MODAL DE SURVEYORS -->
+                <div class="modal-actions-row" style="display: flex; gap: 8px; margin-top: 10px; margin-bottom: 15px;">
+                    <button type="button" class="btn-modal-act" onclick="copySurvRecord()">
+                        📋 Copiar
+                    </button>
+                    <button type="button" class="btn-modal-act" onclick="pasteSurvRecord()">
+                        📥 Pegar
+                    </button>
+                    <button type="button" class="btn-modal-act btn-modal-danger" onclick="deleteSurveyorRecord()">
+                        🗑️ Borrar
+                    </button>
                 </div>
 
                 <div class="form-row-split">
@@ -453,11 +461,11 @@
                 
                 <div class="form-group"><label class="form-label">Observaciones / Incidencias</label><textarea id="survObs" class="form-control" rows="2" placeholder="Notas extra..."></textarea></div>
                 
-                <button class="btn-save" onclick="saveSurveyorEditor()">GUARDAR CAMBIOS</button>
-                <button class="btn-cancel" onclick="closeSurvEditor()">Cancelar</button>
+                <button type="button" class="btn-save" onclick="saveSurveyorEditor()">GUARDAR CAMBIOS</button>
+                <button type="button" class="btn-cancel" onclick="closeSurvEditor()">Cancelar</button>
             </div>
         </div>
-        <!-- NUEVO MODAL PARA TRANSPORTE -->
+
         <div class="modal-overlay" id="transportEditorModal">
             <div class="editor-box" style="width: 450px;">
                 <h4 class="modal-header-title" id="transModalTitle">Registro de Viaje</h4>
@@ -467,11 +475,10 @@
                 <div class="form-row-split">
                     <div class="form-group">
                         <label class="form-label">Chofer</label>
-                        <!-- Usamos un datalist para sugerir nombres repetidos -->
                         <input type="text" id="transChofer" class="form-control" list="choferesList" placeholder="Ej: Eduardo Marchán">
                         <datalist id="choferesList"></datalist>
                     </div>
-                  <div class="form-group">
+                    <div class="form-group">
                         <label class="form-label">Vehículo</label>
                         <input type="text" id="transVehiculo" class="form-control" list="vehiculosList" placeholder="Ej: Mitsubishi Touring" oninput="autoFillPlaca()">
                         <datalist id="vehiculosList"></datalist>
@@ -485,7 +492,7 @@
                 </div>
                 
                 <div class="modal-action-group" style="margin-top: 10px;">
-                    <button class="compact-btn btn-modal-delete" id="btnDeleteTrans" onclick="deleteTransportRecord()" style="display:none;">🗑️ Borrar Viaje</button>
+                    <button type="button" class="compact-btn btn-modal-delete" id="btnDeleteTrans" onclick="deleteTransportRecord()" style="display:none;">🗑️ Borrar Viaje</button>
                 </div>
 
                 <div class="form-row-split">
@@ -503,16 +510,17 @@
                     <input type="number" id="transMonto" class="form-control" value="0">
                 </div>
                 
-                <button class="btn-save" onclick="saveTransportRecord()">GUARDAR VIAJE</button>
-                <button class="btn-cancel" onclick="closeTransportEditor()">Cancelar</button>
+                <button type="button" class="btn-save" onclick="saveTransportRecord()">GUARDAR VIAJE</button>
+                <button type="button" class="btn-cancel" onclick="closeTransportEditor()">Cancelar</button>
             </div>
         </div>
+
         <div class="modal-overlay" id="baseModal">
             <div class="editor-box modal-lg">
                 <h4 class="modal-header-title-simple">💰 Acumulados Previos (Ene-Nov 2025)</h4>
                 <div id="baseList" class="base-list-grid"></div>
-                <button class="btn-save" onclick="saveBases()">GUARDAR CAMBIOS</button>
-                <button class="btn-close-modal" onclick="document.getElementById('baseModal').classList.remove('open')">Cerrar</button>
+                <button type="button" class="btn-save" onclick="saveBases()">GUARDAR CAMBIOS</button>
+                <button type="button" class="btn-close-modal" onclick="document.getElementById('baseModal').classList.remove('open')">Cerrar</button>
             </div>
         </div>
     </div>

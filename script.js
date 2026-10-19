@@ -1,3 +1,15 @@
+/* =========================================================
+   ICG Shifts Management System — script.js (Versión Consolidada)
+   [MEJORA] Uso de actualizaciones granulares (.update) para concurrencia.
+   [MEJORA] Los Tabuladores son parte del estado de la BD.
+   [MEJORA] Grafico de sitios con contraste mejorado y desglose % por cargo.
+========================================= */
+
+// Desactivado: Todos los estilos fueron consolidados en styles.css
+function injectExtraCss() {
+    return;
+}
+
 const firebaseConfig = {
     apiKey: "AIzaSyBEatS2GakJM3G-9l9nP00Pg1dts-BB2bU",
     authDomain: "icgnube-7abb3.firebaseapp.com",
@@ -11,11 +23,23 @@ firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 const auth = firebase.auth();
 
-const DATA_INCRUSTADA = null; 
+const DATA_INCRUSTADA = null;
 
 const MONTHS_BASE = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
-let PERIODS = ["DICIEMBRE 2025"]; MONTHS_BASE.forEach(m => PERIODS.push(`${m} 2026`));
-const DAYS_IN_MONTH = 31;
+const MESES_CAP = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const DEC_2025 = "DICIEMBRE 2025";
+let PERIODS = [];
+
+function buildPeriods() {
+    const now = new Date();
+    const lastYear = now.getMonth() >= 9 ? now.getFullYear() + 1 : now.getFullYear();
+    const list = [DEC_2025];
+    for (let y = 2026; y <= Math.max(2026, lastYear); y++) MONTHS_BASE.forEach(m => list.push(`${m} ${y}`));
+    PERIODS = list;
+}
+buildPeriods();
+
+const DAYS_IN_MONTH = 31; 
 const ROLES = ["Supervisor", "Tecnico de Seguridad", "Inspector", "Surveyor"];
 const ROLE_COLORS = { "Supervisor": "#2563eb", "Tecnico de Seguridad": "#16a34a", "Inspector": "#d97706", "Surveyor": "#8b5cf6" };
 const PALETTE = ["#ef4444", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#64748b"];
@@ -24,216 +48,328 @@ const IGNORE_SHIFT_ACTIVITIES = ["ATESTIGUAMIENTO", "INSPECCION", "MUESTREO", "D
 const DEFAULT_SITES = ["Sidor", "Bauxilum", "Fmo", "Copal", "Palua", "Punta de Piedras"];
 const DEFAULT_ACTIVITIES = ["Buque", "Gabarra", "Muestreo", "Atestiguamiento", "Draft Survey"];
 const DEFAULT_EMPLOYEES = [
-    { id: 1, name: "PEDRO GONZALEZ", role: "Supervisor", status: "Disponible", distanceScore: 8 }, 
+    { id: 1, name: "PEDRO GONZALEZ", role: "Supervisor", status: "Disponible", distanceScore: 8 },
     { id: 2, name: "JONNY FLORES", role: "Supervisor", status: "Disponible", distanceScore: 2 },
-    { id: 3, name: "JORGE CEDEÑO", role: "Supervisor", status: "Disponible", distanceScore: 7 }, 
+    { id: 3, name: "JORGE CEDEÑO", role: "Supervisor", status: "Disponible", distanceScore: 7 },
     { id: 4, name: "DIEGO RODRIGUEZ", role: "Supervisor", status: "Disponible", distanceScore: 5 },
-    { id: 5, name: "DARIS PINTO", role: "Tecnico de Seguridad", status: "Disponible", distanceScore: 7 }, 
+    { id: 5, name: "DARIS PINTO", role: "Tecnico de Seguridad", status: "Disponible", distanceScore: 7 },
     { id: 6, name: "YENNYRES SUBERO", role: "Tecnico de Seguridad", status: "Disponible", distanceScore: 7 },
-    { id: 7, name: "GRISBELYS ASTUDILLO", role: "Tecnico de Seguridad", status: "Disponible", distanceScore: 7 }, 
+    { id: 7, name: "GRISBELYS ASTUDILLO", role: "Tecnico de Seguridad", status: "Disponible", distanceScore: 7 },
     { id: 8, name: "YUER MONTILLA", role: "Tecnico de Seguridad", status: "Disponible", distanceScore: 7 },
-    { id: 9, name: "ALEXANDER MEDINA", role: "Inspector", status: "Disponible", distanceScore: 2 }, 
+    { id: 9, name: "ALEXANDER MEDINA", role: "Inspector", status: "Disponible", distanceScore: 2 },
     { id: 10, name: "FABIAN SOTO", role: "Inspector", status: "Disponible", distanceScore: 3 },
-    { id: 11, name: "AQUILES MAITA", role: "Inspector", status: "Disponible", distanceScore: 8 }, 
+    { id: 11, name: "AQUILES MAITA", role: "Inspector", status: "Disponible", distanceScore: 8 },
     { id: 12, name: "STEFANI ROJAS", role: "Inspector", status: "Disponible", distanceScore: 7 },
-    { id: 13, name: "MARIA NORIEGA", role: "Inspector", status: "Disponible", distanceScore: 10 }, 
+    { id: 13, name: "MARIA NORIEGA", role: "Inspector", status: "Disponible", distanceScore: 10 },
     { id: 14, name: "LEOMAR MARCANO", role: "Inspector", status: "Disponible", distanceScore: 7 },
-    { id: 15, name: "JOEL RODRIGUEZ", role: "Inspector", status: "Disponible", distanceScore: 1 }, 
+    { id: 15, name: "JOEL RODRIGUEZ", role: "Inspector", status: "Disponible", distanceScore: 1 },
     { id: 16, name: "CARLOS FIGUERA", role: "Inspector", status: "Disponible", distanceScore: 1 },
     { id: 17, name: "ENRIQUE GONZALEZ", role: "Inspector", status: "Disponible", distanceScore: 6 },
     { id: 18, name: "KEINEL PALENCIA", role: "Inspector", status: "Disponible", distanceScore: 4 },
-    { id: 19, name: "BRAYAN PEREZ", role: "Inspector", status: "Disponible", distanceScore: 6 }, 
+    { id: 19, name: "BRAYAN PEREZ", role: "Inspector", status: "Disponible", distanceScore: 6 },
     { id: 20, name: "CARLOS CORO", role: "Inspector", status: "Disponible", distanceScore: 8 }
 ];
 
+const DEFAULT_TABULADORES = {
+    "Sidor": {
+        "Buques/Gabarras": [
+            { min: 0, max: 6000, roles: { "Supervisor": 50, "Tecnico de Seguridad": 50, "Inspector": 30 } },
+            { min: 6001, max: 9000, roles: { "Supervisor": 100, "Tecnico de Seguridad": 100, "Inspector": 60 } },
+            { min: 9001, max: 12000, roles: { "Supervisor": 150, "Tecnico de Seguridad": 150, "Inspector": 100 } },
+            { min: 12001, max: 15000, roles: { "Supervisor": 190, "Tecnico de Seguridad": 190, "Inspector": 130 } },
+            { min: 15001, max: 20000, roles: { "Supervisor": 260, "Tecnico de Seguridad": 260, "Inspector": 180 } },
+            { min: 20001, max: 30000, roles: { "Supervisor": 390, "Tecnico de Seguridad": 390, "Inspector": 270 } },
+            { min: 30001, max: 40000, roles: { "Supervisor": 520, "Tecnico de Seguridad": 520, "Inspector": 360 } },
+            { min: 40001, max: 45000, roles: { "Supervisor": 580, "Tecnico de Seguridad": 580, "Inspector": 400 } },
+            { min: 45001, max: 50000, roles: { "Supervisor": 650, "Tecnico de Seguridad": 650, "Inspector": 450 } },
+            { min: 50001, max: 51000, roles: { "Supervisor": 660, "Tecnico de Seguridad": 660, "Inspector": 460 } },
+            { min: 51001, max: 52000, roles: { "Supervisor": 676, "Tecnico de Seguridad": 676, "Inspector": 470 } },
+            { min: 52001, max: 53000, roles: { "Supervisor": 689, "Tecnico de Seguridad": 689, "Inspector": 480 } },
+            { min: 53001, max: 54000, roles: { "Supervisor": 700, "Tecnico de Seguridad": 700, "Inspector": 490 } },
+            { min: 54001, max: 55000, roles: { "Supervisor": 715, "Tecnico de Seguridad": 715, "Inspector": 500 } },
+        ]
+    },
+    "Copal": { "Buques/Gabarras": [{ min: 0, max: 6000, roles: { "Inspector": 30 } }, { min: 6001, max: 12000, roles: { "Inspector": 80 } }, { min: 12001, max: 20000, roles: { "Inspector": 120 } }, { min: 20001, max: 30000, roles: { "Inspector": 150 } }] },
+    "Fmo": { "Buques/Gabarras": [{ min: 0, max: 6000, roles: { "Inspector": 30 } }, { min: 6001, max: 12000, roles: { "Inspector": 80 } }, { min: 12001, max: 20000, roles: { "Inspector": 120 } }, { min: 20001, max: 30000, roles: { "Inspector": 150 } }] },
+    "Bauxilum": { "Buques/Gabarras": [{ min: 0, max: 6000, roles: { "Inspector": 30 } }, { min: 6001, max: 9000, roles: { "Inspector": 60 } }, { min: 9001, max: 12000, roles: { "Inspector": 100 } }, { min: 12001, max: 15000, roles: { "Inspector": 130 } }, { min: 15001, max: 20000, roles: { "Inspector": 180 } }, { min: 20001, max: 30000, roles: { "Inspector": 270 } }, { min: 30001, max: 40000, roles: { "Inspector": 360 } }, { min: 40001, max: 45000, roles: { "Inspector": 400 } }, { min: 45001, max: 50000, roles: { "Inspector": 450 } }, { min: 50001, max: 51000, roles: { "Inspector": 460 } }, { min: 51001, max: 52000, roles: { "Inspector": 470 } }, { min: 52001, max: 53000, roles: { "Inspector": 480 } }, { min: 53001, max: 54000, roles: { "Inspector": 490 } }, { min: 54001, max: 55000, roles: { "Inspector": 500 } }] }
+};
+
 const USER_ROLES = {
-    // 4
     "jose.solano@icglobal.com.ve": "manager",
     "frank.medina@icglobal.com.ve": "manager",
-    // 3
     "erick.patino@icglobal.com.ve": "adminglobal",
     "gilbert.gomez@icglobal.com.ve": "adminglobal",
-    // 2
     "rrhh@icglobal.com.ve": "rrhh",
     "administracion@icglobal.com.ve": "rrhh",
     "julissa@icglobal.com.ve": "rrhh",
-    // 1 
     "asistentepzo@icglobal.com.ve": "asistente"
 };
 
-let appData = { employees: [...DEFAULT_EMPLOYEES], sites: [...DEFAULT_SITES], activities: [...DEFAULT_ACTIVITIES], records: {}, historical2025: {} };
+let appData = { employees: [...DEFAULT_EMPLOYEES], sites: [...DEFAULT_SITES], activities: [...DEFAULT_ACTIVITIES], records: {}, historical2025: {}, tabuladores: {...DEFAULT_TABULADORES} };
 let currentEdit = { empId: null, dayIdx: null };
 let isDirty = false;
 let copiedRecordData = null;
+let copiedSurvRecordData = null;
+let dataLoaded = false;
+let currentUserEmail = '';
+let transRangeMonth = '';
+let toastTimer = null;
 
-function showToast(msg) {
+/* =========================================
+   UTILIDADES
+========================================= */
+function esc(s) {
+    return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+const isTouch = () => window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+const pad2 = n => String(n).padStart(2, '0');
+function localISO(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function localHM(d) { return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+
+function parsePeriod(p) {
+    const parts = String(p || '').split(' ');
+    return { mi: MONTHS_BASE.indexOf((parts[0] || '').toUpperCase()), year: parseInt(parts[1]) };
+}
+function periodYear(p) { return parsePeriod(p).year; }
+function periodKey(p) { const { mi, year } = parsePeriod(p); return (isNaN(year) ? 0 : year) * 12 + mi; }
+function daysInMonthOf(p) {
+    const { mi, year } = parsePeriod(p);
+    if (mi < 0 || isNaN(year)) return 31;
+    return new Date(year, mi + 1, 0).getDate();
+}
+function currentPeriodName() { const n = new Date(); return `${MONTHS_BASE[n.getMonth()]} ${n.getFullYear()}`; }
+function dayMeta(p, day) {
+    const { mi, year } = parsePeriod(p);
+    if (mi < 0 || isNaN(year)) return { invalid: day > 31, wk: '', weekend: false };
+    if (day > daysInMonthOf(p)) return { invalid: true, wk: '', weekend: false };
+    const dow = new Date(year, mi, day).getDay();
+    return { invalid: false, wk: 'DLMMJVS'[dow], weekend: dow === 0 || dow === 6 };
+}
+function isTabActive(tab) { const el = document.getElementById('tab-' + tab); return !!(el && el.classList.contains('active')); }
+
+function showToast(msg, type) {
     const toast = document.getElementById('toastNotif');
+    if (!toast) return;
     toast.innerText = msg;
+    toast.classList.toggle('error', type === 'error');
     toast.classList.add('show');
-    setTimeout(() => { toast.classList.remove('show'); }, 2500);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.classList.remove('show'); }, type === 'error' ? 4500 : 2500);
+}
+function notify(msg) { showToast('⚠️ ' + String(msg).replace(/^⚠️\s*/, '').replace(/^ERROR:\s*/, ''), 'error'); }
+
+function auditStamp() { return { updatedBy: currentUserEmail || 'desconocido', updatedAt: Date.now() }; }
+
+function calcHours(activity, days) {
+    const a = String(activity || '').toUpperCase();
+    const base = (a.includes("MUESTREO") || a.includes("ATESTIGUAMIENTO") || a.includes("DRAFT")) ? 4 : 12;
+    return Math.max(1, days) * base;
+}
+
+function sumPeriod(empId, p, withPhantom) {
+    if (p === DEC_2025) return (appData.historical2025[empId] && appData.historical2025[empId].month) || 0;
+    const row = appData.records[p] && appData.records[p][empId];
+    if (!row) return 0;
+    let s = 0;
+    row.forEach(r => { if (r) { const v = parseFloat(r.amount) || 0; if (withPhantom || !r.isPhantom) s += v; } });
+    return s;
+}
+function sumYear(empId, year, withPhantom) {
+    if (year === 2025) return (appData.historical2025[empId] && appData.historical2025[empId].year) || 0;
+    let s = 0;
+    PERIODS.forEach(p => { if (periodYear(p) === year) s += sumPeriod(empId, p, withPhantom); });
+    return s;
+}
+function yearSums(empId, year) {
+    if (year === 2025) return { amt: sumYear(empId, 2025, false), hours: 0 };
+    let amt = 0, hours = 0;
+    PERIODS.forEach(p => {
+        if (periodYear(p) !== year) return;
+        const row = appData.records[p] && appData.records[p][empId];
+        if (!row) return;
+        row.forEach(r => { if (r && !r.isPhantom && parseFloat(r.amount) > 0) { amt += parseFloat(r.amount); hours += parseFloat(r.hours) || 0; } });
+    });
+    return { amt, hours };
+}
+function periodHasData(p) {
+    const recs = appData.records[p];
+    if (!recs) return false;
+    return Object.values(recs).some(arr => arr && arr.some(r => r && parseFloat(r.amount) > 0));
+}
+
+function clearSpanAt(row, idx) {
+    const c = row[idx];
+    if (!c) return;
+    let head = idx;
+    if (c.linked) { for (let j = idx - 1; j >= 0; j--) { if (row[j] && !row[j].linked) { head = j; break; } } }
+    const span = Math.max(1, (row[head] && row[head].span) || 1);
+    for (let k = 0; k < span && head + k < row.length; k++) row[head + k] = null;
+    row[idx] = null;
+}
+
+function hasConflict(row, s0, e0, ownStart, ownSpan) {
+    for (let d = s0; d <= e0; d++) {
+        if (row[d] && !(ownStart !== null && d >= ownStart && d < ownStart + ownSpan)) return true;
+    }
+    return false;
+}
+function normalizeRow(row) {
+    const r = Array.isArray(row) ? row : [];
+    while (r.length < DAYS_IN_MONTH) r.push(null);
+    return r;
+}
+
+/* =========================================
+   CARGA / GUARDADO (MEJORADO CON .UPDATE)
+========================================= */
+
+function showLoadWarning() {
+    if (document.getElementById('loadBanner')) return;
+    const b = document.createElement('div');
+    b.id = 'loadBanner'; b.className = 'load-banner';
+    b.textContent = '⚠️ MODO PROTEGIDO: no se pudieron leer los datos de la nube. No se guardará nada hasta que recargues la página.';
+    const app = document.getElementById('mainApp');
+    app.insertBefore(b, app.firstChild);
 }
 
 function init() {
-    if (DATA_INCRUSTADA) { loadParsedData(DATA_INCRUSTADA, true); return; }
-    
-    database.ref('icg_master_data').once('value').then((snapshot) => {
+    if (DATA_INCRUSTADA) { loadParsedData(DATA_INCRUSTADA, true); dataLoaded = true; return Promise.resolve(); }
+
+    return database.ref('icg_master_data').once('value').then((snapshot) => {
         const saved = snapshot.val();
-        if(saved) { 
-            try { loadParsedData(saved, false); } catch(e) { setupDefault(); } 
-        } else { 
-            setupDefault(); 
+        if (saved) {
+            try { loadParsedData(saved, false); dataLoaded = true; }
+            catch (e) { console.error(e); dataLoaded = false; setupDefault(); showLoadWarning(); }
+        } else {
+            dataLoaded = true; 
+            setupDefault();
         }
     }).catch((error) => {
         console.error("Error conectando a Firebase:", error);
-        alert("Hubo un problema de conexión con la Nube. Cargando sistema en blanco.");
-        setupDefault();
+        alert("Hubo un problema de conexión con la Nube. El sistema queda en MODO PROTEGIDO.");
+        dataLoaded = false; setupDefault(); showLoadWarning();
     });
 }
 
-function save() { 
-    const cleanData = JSON.parse(JSON.stringify(appData));
-    
-    database.ref('icg_master_data').set(cleanData)
-        .then(() => { setDirty(false); showToast("☁️ ✅ Guardado en la nube"); })
-        .catch((error) => { alert("⚠️ Error de conexión: No se pudo guardar el cambio en la Nube."); });
+function dbUpdate(updatesObj, successMsg = "☁️ ✅ Guardado en la nube") {
+    if (!dataLoaded) {
+        notify('Modo protegido: NO se guardó nada en la nube.');
+        return Promise.resolve();
+    }
+    setDirty(true);
+    const cleanUpdates = JSON.parse(JSON.stringify(updatesObj));
+    return database.ref('icg_master_data').update(cleanUpdates)
+        .then(() => { setDirty(false); showToast(successMsg); })
+        .catch((e) => { console.error(e); notify("⚠️ Error guardando en la Nube"); });
+}
+
+function fillPeriodSelectors(selected) {
+    ['monthSelector', 'monthSelectorSug', 'monthSelectorSurv', 'monthSelectorTrans'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = '';
+        PERIODS.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; el.appendChild(o); });
+        if (selected) el.value = selected;
+    });
 }
 
 function setupDefault() {
-    PERIODS.forEach(p => { if(!appData.records[p]) appData.records[p] = {}; });
-    
-    const sel = document.getElementById('monthSelector'); sel.innerHTML = '';
-    const selSug = document.getElementById('monthSelectorSug'); selSug.innerHTML = '';
-    
-    PERIODS.forEach(p => { 
-        let op = document.createElement('option'); op.value = p; op.innerText = p; sel.appendChild(op); 
-        let opSug = document.createElement('option'); opSug.value = p; opSug.innerText = p; selSug.appendChild(opSug); 
-    });
-    
-    const now = new Date(); 
-    let curP = `${MONTHS_BASE[now.getMonth()]} ${now.getFullYear()}`;
-    if(now.getFullYear()===2025 && now.getMonth()===11) curP="DICIEMBRE 2025";
-    if(PERIODS.includes(curP)) { sel.value = curP; selSug.value = curP; }
-    
+    PERIODS.forEach(p => { if (!appData.records[p]) appData.records[p] = {}; });
+    const cur = currentPeriodName();
+    fillPeriodSelectors(PERIODS.includes(cur) ? cur : PERIODS[PERIODS.length - 1]);
     renderConfigLists(); handleMonthChange();
 }
 
 function loadParsedData(parsed, isEmbedded) {
-    if(!parsed.historical2025) parsed.historical2025 = {};
+    if (!parsed.historical2025) parsed.historical2025 = {};
+    if (!Array.isArray(parsed.employees)) parsed.employees = parsed.employees ? Object.values(parsed.employees) : [];
+    if (!parsed.sites) parsed.sites = [];
+    if (!parsed.activities) parsed.activities = [];
+    if (!parsed.records) parsed.records = {};
     
-    if(parsed.employees) {
-        parsed.employees.forEach(e => { 
-            if(!e.status) e.status = "Disponible"; 
-            
-            // NUEVO: Migración de datos para inyectar las distancias
-            if(e.distanceScore === undefined) {
-                // Busca al empleado en la lista por defecto y le copia su distancia
-                const defEmp = DEFAULT_EMPLOYEES.find(d => d.id === e.id);
-                e.distanceScore = defEmp ? defEmp.distanceScore : 5;
-            }
+    appData.tabuladores = parsed.tabuladores || {...DEFAULT_TABULADORES};
+
+    parsed.employees.forEach(e => {
+        if (!e.status) e.status = "Disponible";
+        if (e.distanceScore === undefined) {
+            const defEmp = DEFAULT_EMPLOYEES.find(d => d.id === e.id);
+            e.distanceScore = defEmp ? defEmp.distanceScore : 5;
+        }
+    });
+    if (!Array.isArray(parsed.sites)) parsed.sites = Object.values(parsed.sites);
+    if (!Array.isArray(parsed.activities)) parsed.activities = Object.values(parsed.activities);
+
+    if (parsed.transporte) {
+        Object.keys(parsed.transporte).forEach(k => {
+            const v = parsed.transporte[k];
+            parsed.transporte[k] = (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean);
         });
     }
     appData = parsed;
-    
-    if(appData.records) {
-        Object.keys(appData.records).forEach(kUp => {
-            if(!PERIODS.includes(kUp)) PERIODS.unshift(kUp); 
-            Object.keys(appData.records[kUp]).forEach(eid => {
-                let arr = appData.records[kUp][eid];
-                
-                if(!Array.isArray(arr) || arr.length < 31) {
-                    const newArr = Array(31).fill(null);
-                    if(Array.isArray(arr)) { 
-                        for(let i=0; i<Math.min(arr.length, 31); i++) newArr[i] = arr[i] === undefined ? null : arr[i]; 
-                    } else if (arr && typeof arr === 'object') {
-                        Object.keys(arr).forEach(k => {
-                            let idx = parseInt(k);
-                            if(!isNaN(idx) && idx >= 0 && idx < 31) newArr[idx] = arr[k] === undefined ? null : arr[k];
-                        });
-                    }
-                    appData.records[kUp][eid] = newArr;
-                }
-            });
-        });
-    }
+    appData.tabuladores = appData.tabuladores || {...DEFAULT_TABULADORES};
 
-    const sel = document.getElementById('monthSelector'); sel.innerHTML = '';
-    const selSug = document.getElementById('monthSelectorSug'); selSug.innerHTML = '';
-    
-    PERIODS.forEach(p => { 
-        let op = document.createElement('option'); op.value = p; op.innerText = p; sel.appendChild(op); 
-        let opSug = document.createElement('option'); opSug.value = p; opSug.innerText = p; selSug.appendChild(opSug); 
+    buildPeriods();
+    Object.keys(appData.records).forEach(kUp => {
+        if (!PERIODS.includes(kUp)) PERIODS.push(kUp);
+        Object.keys(appData.records[kUp]).forEach(eid => {
+            let arr = appData.records[kUp][eid];
+            if (!Array.isArray(arr) || arr.length < 31) {
+                const newArr = Array(31).fill(null);
+                if (Array.isArray(arr)) {
+                    for (let i = 0; i < Math.min(arr.length, 31); i++) newArr[i] = arr[i] === undefined ? null : arr[i];
+                } else if (arr && typeof arr === 'object') {
+                    Object.keys(arr).forEach(k => {
+                        const idx = parseInt(k);
+                        if (!isNaN(idx) && idx >= 0 && idx < 31) newArr[idx] = arr[k] === undefined ? null : arr[k];
+                    });
+                }
+                appData.records[kUp][eid] = newArr;
+            }
+        });
     });
-    
+    PERIODS.sort((a, b) => periodKey(a) - periodKey(b));
+
     let foundMonth = null;
-    for(let i=PERIODS.length-1; i>=0; i--) {
-        const p = PERIODS[i];
-        if(appData.records[p]) {
-            const hasData = Object.values(appData.records[p]).some(arr => arr && arr.some(r => r && (parseFloat(r.amount) > 0)));
-            if(hasData) { foundMonth = p; break; }
-        }
-    }
-    
-    if(foundMonth) { 
-        sel.value = foundMonth; selSug.value = foundMonth; 
-    } else {
-        const now = new Date(); 
-        let curP = `${MONTHS_BASE[now.getMonth()]} ${now.getFullYear()}`;
-        if(now.getFullYear()===2025 && now.getMonth()===11) curP="DICIEMBRE 2025";
-        if(PERIODS.includes(curP)) { sel.value = curP; selSug.value = curP; }
-    }
-    if(isEmbedded) alert("✅ Datos cargados.");
+    for (let i = PERIODS.length - 1; i >= 0; i--) { if (periodHasData(PERIODS[i])) { foundMonth = PERIODS[i]; break; } }
+    const cur = currentPeriodName();
+    const selected = foundMonth || (PERIODS.includes(cur) ? cur : PERIODS[PERIODS.length - 1]);
+    fillPeriodSelectors(selected);
+
+    if (isEmbedded) alert("✅ Datos cargados.");
     renderConfigLists(); handleMonthChange();
 }
 
 function syncMonths(val) {
-    document.getElementById('monthSelector').value = val;
-    document.getElementById('monthSelectorSug').value = val;
-    if(document.getElementById('monthSelectorSurv')) document.getElementById('monthSelectorSurv').value = val;
-    if(document.getElementById('monthSelectorTrans')) document.getElementById('monthSelectorTrans').value = val;
+    ['monthSelector', 'monthSelectorSug', 'monthSelectorSurv', 'monthSelectorTrans'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = val;
+    });
     handleMonthChange();
-    if (document.getElementById('tab-sugerencias').classList.contains('active')) renderSuggestions();
-    if (document.getElementById('tab-surveyors').classList.contains('active')) renderSurveyorTable(val);
-    if (document.getElementById('tab-transporte').classList.contains('active')) renderTransportTable(val);
-    
-    if (document.getElementById('tab-transporte').classList.contains('active')) {
-    updateTransDateRange();
-}
+    if (isTabActive('sugerencias')) renderSuggestions();
+    if (isTabActive('surveyors')) renderSurveyorTable(val);
+    if (isTabActive('transporte')) { updateTransDateRange(); }
 }
 
 function closeEditor() { document.getElementById('cellEditorModal').classList.remove('open'); }
-function setDirty(val) { isDirty = val; const dot = document.getElementById('unsavedDot'); if(isDirty) dot.classList.add('visible'); else dot.classList.remove('visible'); }
+function setDirty(val) { isDirty = val; const dot = document.getElementById('unsavedDot'); if (isDirty) dot.classList.add('visible'); else dot.classList.remove('visible'); }
+window.addEventListener('beforeunload', e => { if (isDirty) { e.preventDefault(); e.returnValue = ''; } });
 
 function switchTab(tab) {
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
-    
-    // NUEVO: Buscamos el botón por su ID de forma segura en lugar de depender del "clic"
     const btn = document.getElementById('nav-' + tab);
-    if(btn) btn.classList.add('active'); 
-    
+    if (btn) btn.classList.add('active');
     document.getElementById('tab-' + tab).classList.add('active');
-    
-    if(tab === 'nomina') handleMonthChange();
-    if(tab === 'sugerencias') renderSuggestions();
-    if(tab === 'graficos') renderAllCharts();
-    if(tab === 'analytics') renderAnalytics();
-    if(tab === 'surveyors') {
-        // Copiamos los meses disponibles al selector de Surveyors
-        const selSurv = document.getElementById('monthSelectorSurv');
-        if(selSurv && selSurv.options.length === 0) {
-            selSurv.innerHTML = document.getElementById('monthSelector').innerHTML;
-            selSurv.value = document.getElementById('monthSelector').value;
-        }
-        renderSurveyorTable(selSurv.value);
-    }
-    if(tab === 'registro') initQuickEntry();
-    if(tab === 'transporte') {
+
+    if (tab === 'nomina') handleMonthChange();
+    if (tab === 'sugerencias') renderSuggestions();
+    if (tab === 'graficos') renderAllCharts();
+    if (tab === 'analytics') renderAnalytics();
+    if (tab === 'surveyors') renderSurveyorTable(document.getElementById('monthSelectorSurv').value);
+    if (tab === 'registro') initQuickEntry();
+    if (tab === 'transporte') {
         const selTrans = document.getElementById('monthSelectorTrans');
-        if(selTrans && selTrans.options.length === 0) {
-            selTrans.innerHTML = document.getElementById('monthSelector').innerHTML;
-            selTrans.value = document.getElementById('monthSelector').value;
-        }
-        renderTransportTable(selTrans.value);
+        if (transRangeMonth !== selTrans.value || !document.getElementById('transDateFrom').value) updateTransDateRange();
+        else renderTransportTable();
     }
 }
 
@@ -243,7 +379,7 @@ function handleMonthChange() {
     const decContainer = document.getElementById('dec2025Container');
     const totalDisplay = document.getElementById('monthlyTotalDisplay');
     document.getElementById('printHeaderTitle').innerText = "REPORTE DE NÓMINA - " + period;
-    if (period === "DICIEMBRE 2025") {
+    if (period === DEC_2025) {
         tableContainer.style.display = 'none'; decContainer.style.display = 'block'; totalDisplay.style.visibility = 'hidden';
         renderDec2025();
     } else {
@@ -257,165 +393,188 @@ function renderDec2025() {
     appData.employees.forEach(emp => {
         const hist = appData.historical2025[emp.id] || { month: 0, year: 0 };
         const tr = document.createElement('tr'); tr.className = 'dec2025-row';
-        tr.innerHTML = `<td style="padding:10px; border-bottom:1px solid #eee;"><b>${emp.name}</b><br><small style="color:#64748b">${emp.role}</small></td><td style="padding:10px; text-align:right; border-bottom:1px solid #eee;"><input type="number" class="dec2025-input" value="${hist.month}" onchange="saveDec2025(${emp.id}, 'month', this.value)"></td><td style="padding:10px; text-align:right; border-bottom:1px solid #eee;"><input type="number" class="dec2025-input" value="${hist.year}" onchange="saveDec2025(${emp.id}, 'year', this.value)" style="color:var(--accent); font-weight:bold;"></td>`;
+        tr.innerHTML = `<td style="padding:10px; border-bottom:1px solid #eee;"><b>${esc(emp.name)}</b><br><small style="color:#64748b">${esc(emp.role)}</small></td><td style="padding:10px; text-align:right; border-bottom:1px solid #eee;"><input type="number" class="dec2025-input" value="${hist.month}" onchange="saveDec2025(${emp.id}, 'month', this.value)"></td><td style="padding:10px; text-align:right; border-bottom:1px solid #eee;"><input type="number" class="dec2025-input" value="${hist.year}" onchange="saveDec2025(${emp.id}, 'year', this.value)" style="color:var(--accent); font-weight:bold;"></td>`;
         tbody.appendChild(tr);
     });
 }
 function saveDec2025(empId, field, val) {
-    if(!appData.historical2025[empId]) appData.historical2025[empId] = { month: 0, year: 0 };
-    appData.historical2025[empId][field] = parseFloat(val) || 0; save();
+    if (!appData.historical2025[empId]) appData.historical2025[empId] = { month: 0, year: 0 };
+    appData.historical2025[empId][field] = parseFloat(val) || 0; 
+    dbUpdate({ [`historical2025/${empId}`]: appData.historical2025[empId] });
+}
+
+/* =========================================
+   NÓMINA
+========================================= */
+function siteColor(s) {
+    if (!s) return "#64748b";
+    const str = String(s).toUpperCase().trim();
+
+    const KNOWN_SITES = {
+        "SIDOR": "#2563eb",           // Azul Real
+        "BAUXILUM": "#d97706",         // Ámbar / Naranja
+        "FMO": "#0284c7",              // Celeste / Cyan
+        "COPAL": "#16a34a",            // Verde Esmeralda
+        "PALUA": "#dc2626",            // Rojo
+        "PUNTA DE PIEDRAS": "#c026d3",  // Magenta / Rosa
+        "VENALUM": "#ea580c",          // Naranja Intenso
+        "CASITERITA": "#059669",       // Verde Menta / Turquesa
+        "ORINOCO IRON": "#4f46e5",     // Índigo
+        "LABORATORIO": "#7c3aed"       // Violeta
+    };
+
+    if (KNOWN_SITES[str]) return KNOWN_SITES[str];
+
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    const hue = (hash * 137.508) % 360;
+    
+    return `hsl(${Math.floor(hue)}, 75%, 40%)`;
+}
+
+function buildTooltip(rec) {
+    const amt = parseFloat(rec.amount) || 0;
+    return [
+        `💵 $${amt}`,
+        `📍 ${rec.site || rec.muelle || '-'}`,
+        `⚓ ${rec.activity || '-'}`,
+        `🕒 ${rec.shift || '-'}`,
+        `📅 Días: ${rec.span || 1}`,
+        rec.hours ? `⏱️ Horas: ${rec.hours}` : null,
+        rec.obs ? `📝 NOTA: ${rec.obs}` : null
+    ].filter(Boolean).join('\n');
+}
+
+function matchesPayrollFilter(emp, period, filter) {
+    if (!filter) return true;
+    if (emp.name.toUpperCase().includes(filter) || emp.role.toUpperCase().includes(filter)) return true;
+    const userRecs = (appData.records[period] && appData.records[period][emp.id]) || [];
+    return userRecs.some(rec => {
+        if (!rec) return false;
+        const act = rec.activity && rec.activity.toUpperCase().includes(filter);
+        const loc = rec.site || rec.location || rec.muelle;
+        return act || (loc && loc.toUpperCase().includes(filter));
+    });
+}
+
+function cellClick(td, eid, i, kind) {
+    selectCell(td);
+    if (isTouch()) { if (kind === 'surv') openSurvEditor(eid, i); else openEditor(eid, i); }
 }
 
 function renderTable(period) {
     const tbody = document.getElementById('tableBody'); const thead = document.getElementById('tableHeader');
-    const printBody = document.getElementById('printBody'); 
+    const printBody = document.getElementById('printBody');
     tbody.innerHTML = ''; printBody.innerHTML = '';
-    if(!appData.records[period]) appData.records[period] = {};
+    if (!appData.records[period]) appData.records[period] = {};
     const filter = document.getElementById('searchPayroll').value.toUpperCase();
     let h = `<th class="sticky-col sticky-col-header" style="text-align:left; min-width:140px;">EMPLEADO</th>`;
-    for(let i=1; i<=DAYS_IN_MONTH; i++) h += `<th class="day-col">${i}</th>`;
+    for (let i = 1; i <= DAYS_IN_MONTH; i++) {
+        const m = dayMeta(period, i);
+        h += `<th class="day-col${m.weekend ? ' day-weekend' : ''}${m.invalid ? ' day-invalid' : ''}"><div>${i}</div><div class="wk">${m.wk}</div></th>`;
+    }
     h += `<th class="center-text">TOTAL MES</th><th class="center-text">ACUM. ANUAL</th>`;
     thead.innerHTML = h;
-    let grandTotal = 0; const currentYear = period.split(' ')[1];
+    let grandTotal = 0; const year = periodYear(period); const usedSites = new Set();
 
     appData.employees.forEach(emp => {
-        if (emp.role === "Surveyor") return; // Oculta a los surveyors de esta vista
-        
-        if (filter) {
-            const nameMatch = emp.name.toUpperCase().includes(filter);
-            const roleMatch = emp.role.toUpperCase().includes(filter);
-            
-            const userRecs = (appData.records[period] && appData.records[period][emp.id]) || [];
-            const recordMatch = userRecs.some(rec => {
-                if (!rec) return false;
-                const actMatch = rec.activity && rec.activity.toUpperCase().includes(filter);
-                const siteMatch = (rec.site || rec.location || rec.muelle) && 
-                                  (rec.site || rec.location || rec.muelle).toUpperCase().includes(filter);
-                return actMatch || siteMatch;
-            });
-
-            if (!nameMatch && !roleMatch && !recordMatch) return;
-        }
-        if(!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(DAYS_IN_MONTH).fill(null);
-        let mTotal = 0; 
-        let cells = '';
-        for(let i=0; i < DAYS_IN_MONTH; i++) {
-            const rec = appData.records[period][emp.id][i];
+        if (emp.role === "Surveyor") return;
+        if (!matchesPayrollFilter(emp, period, filter)) return;
+        if (!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(DAYS_IN_MONTH).fill(null);
+        const row = appData.records[period][emp.id];
+        let mTotal = 0; let cells = '';
+        for (let i = 0; i < DAYS_IN_MONTH; i++) {
+            const rec = row[i]; const m = dayMeta(period, i + 1);
             if (rec && rec.span > 1) {
-                let phantomClass = rec.isPhantom ? 'phantom-cell' : '';
-                let shiftIcon = rec.isPhantom ? '🚫' : (rec.shift==='Diurno'?'☀️':(rec.shift==='Nocturno'?'🌙':''));
-                const obsText = rec.obs ? `\n📝 NOTA: ${rec.obs}` : '';
+                const phantomClass = rec.isPhantom ? 'phantom-cell' : '';
+                const shiftIcon = rec.isPhantom ? '🚫' : (rec.shift === 'Diurno' ? '☀️' : (rec.shift === 'Nocturno' ? '🌙' : ''));
                 const amtNum = parseFloat(rec.amount) || 0;
-                const tooltip = `💵 $${amtNum}\n📍 ${rec.site}\n⚓ ${rec.activity}\n🕒 ${rec.shift}\n📅 Días: ${rec.span}${obsText}`;
-                
-                cells += `<td colspan="${rec.span}" class="data-cell merged-cell ${phantomClass}" data-tooltip="${tooltip}" onclick="selectCell(this)" ondblclick="openEditor(${emp.id}, ${i})">${rec.obs?'<div class="obs-dot"></div>':''}<div style="font-size:0.8rem;">$${amtNum}</div><div style="font-size:0.6rem; overflow:hidden; white-space:nowrap; padding:0 2px;">${shiftIcon} ${rec.activity}</div></td>`;
-                
-                if (!rec.isPhantom) {
-                    mTotal += amtNum;
-                } 
+                const stripe = (!rec.isPhantom && rec.site) ? `box-shadow: inset 0 -3px 0 ${siteColor(rec.site)};` : '';
+                if (!rec.isPhantom && rec.site) usedSites.add(rec.site);
+                cells += `<td colspan="${rec.span}" class="data-cell merged-cell ${phantomClass}" style="${stripe}" data-tooltip="${esc(buildTooltip(rec))}" onclick="cellClick(this, ${emp.id}, ${i}, 'nom')" ondblclick="openEditor(${emp.id}, ${i})">${rec.obs ? '<div class="obs-dot"></div>' : ''}<div class="cell-amt">$${amtNum}</div><div class="cell-sub">${shiftIcon} ${esc(rec.activity)}</div></td>`;
+                if (!rec.isPhantom) mTotal += amtNum;
                 i += (rec.span - 1);
-            } else if (rec && rec.linked) { 
-                cells += `<td class="data-cell" style="background:#f1f5f9;">-</td>`; 
+            } else if (rec && rec.linked) {
+                cells += `<td class="data-cell" style="background:#f1f5f9;">-</td>`;
             } else {
-                const amt = rec ? (parseFloat(rec.amount) || 0) : 0; 
-                
-                // ESCUDO ACTIVADO: Primero preguntamos si el día está vacío (!rec). 
-                // Si no está vacío, entonces sí le preguntamos si NO es fantasma (!rec.isPhantom).
-                if (!rec || !rec.isPhantom) {
-                    mTotal += amt;
-                }
-                
-                let phantomClass = (rec && rec.isPhantom) ? 'phantom-cell' : '';
+                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
+                if (!rec || !rec.isPhantom) mTotal += amt;
+                if (!rec && m.invalid) { cells += `<td class="data-cell day-col day-invalid"></td>`; continue; }
+                const phantomClass = (rec && rec.isPhantom) ? 'phantom-cell' : '';
                 let shiftIcon = '';
-                
-                if (rec && rec.isPhantom) {
-                    shiftIcon = '<span style="font-size:0.6rem;">🚫</span>';
-                } else if(rec && rec.shift === 'Diurno') {
-                    shiftIcon = '<span class="shift-day" style="font-size:0.6rem;">☀</span>';
-                } else if(rec && rec.shift === 'Nocturno') {
-                    shiftIcon = '<span class="shift-night" style="font-size:0.6rem;">☾</span>';
-                }
-                
-                cells += `<td class="data-cell day-col ${amt>0?'has-data':''} ${phantomClass}" onclick="selectCell(this)" ondblclick="openEditor(${emp.id}, ${i})">${(rec&&rec.obs)?'<div class="obs-dot"></div>':''}${amt>0?amt:''}${shiftIcon}</td>`;
+                if (rec && rec.isPhantom) shiftIcon = '<span style="font-size:0.6rem;">🚫</span>';
+                else if (rec && rec.shift === 'Diurno') shiftIcon = '<span class="shift-day" style="font-size:0.6rem;">☀</span>';
+                else if (rec && rec.shift === 'Nocturno') shiftIcon = '<span class="shift-night" style="font-size:0.6rem;">☾</span>';
+                const stripe = (rec && !rec.isPhantom && amt > 0 && rec.site) ? `style="box-shadow: inset 0 -3px 0 ${siteColor(rec.site)};"` : '';
+                if (rec && !rec.isPhantom && amt > 0 && rec.site) usedSites.add(rec.site);
+                const tip = (rec && amt > 0) ? ` data-tooltip="${esc(buildTooltip(rec))}"` : '';
+                cells += `<td class="data-cell day-col ${amt > 0 ? 'has-data' : ''} ${phantomClass} ${m.weekend ? 'wk-end' : ''}" ${stripe}${tip} onclick="cellClick(this, ${emp.id}, ${i}, 'nom')" ondblclick="openEditor(${emp.id}, ${i})">${(rec && rec.obs) ? '<div class="obs-dot"></div>' : ''}${amt > 0 ? amt : ''}${shiftIcon}</td>`;
             }
         }
         grandTotal += mTotal;
-        let yTotal = 0;
-        PERIODS.filter(p => p.includes(currentYear)).forEach(p => { 
-            if(appData.records[p] && appData.records[p][emp.id]) { 
-                yTotal += appData.records[p][emp.id].reduce((sum, r) => sum + (r && !r.isPhantom && (parseFloat(r.amount)>0) ? parseFloat(r.amount) : 0), 0); 
-            } 
-        });
-        
-        // Si el empleado está Fuera de Servicio y NO hizo dinero este mes, lo saltamos y no lo dibujamos.
+        const yTotal = yearSums(emp.id, year).amt;
+
         if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
 
         const tr = document.createElement('tr');
-        
-        // Si llegó hasta aquí y está Fuera de Servicio (es decir, mTotal > 0), le ponemos la clase gris.
-        if (emp.status === "Fuera de Servicio") {
-            tr.className = 'inactive-row';
-        }
-        
-        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem;">${emp.name}</div><div style="font-size:0.65rem; color:#64748b">${emp.role}</div></td>${cells}<td class="total-cell-month center-text">${mTotal}</td><td class="total-cell-year center-text">${yTotal}</td>`;
+        if (emp.status === "Fuera de Servicio") tr.className = 'inactive-row';
+        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem;">${esc(emp.name)}</div><div style="font-size:0.65rem; color:#64748b">${esc(emp.role)}</div></td>${cells}<td class="total-cell-month center-text">${mTotal}</td><td class="total-cell-year center-text">${yTotal}</td>`;
         tbody.appendChild(tr);
         const trPrint = document.createElement('tr');
-        trPrint.innerHTML = `<td>${emp.name}<br><small style="font-style:italic;">${emp.role}</small></td><td class="text-center">$${mTotal.toLocaleString()}</td><td class="text-center">$${yTotal.toLocaleString()}</td>`;
+        trPrint.innerHTML = `<td>${esc(emp.name)}<br><small style="font-style:italic;">${esc(emp.role)}</small></td><td class="text-center">$${mTotal.toLocaleString()}</td><td class="text-center">$${yTotal.toLocaleString()}</td>`;
         printBody.appendChild(trPrint);
     });
     document.getElementById('monthTotal').innerText = grandTotal.toLocaleString();
+
+    let legend = document.getElementById('siteLegend');
+    if (!legend) {
+        legend = document.createElement('div'); legend.id = 'siteLegend'; legend.className = 'site-legend';
+        document.querySelector('#tab-nomina .table-wrapper').insertAdjacentElement('beforebegin', legend);
+    }
+    legend.innerHTML = usedSites.size 
+    ? '<strong style="margin-right:10px;">Franja inferior = sitio:</strong>' + 
+      [...usedSites].sort().map(s => 
+          `<span style="display:inline-flex; align-items:center; gap:5px; margin-right:14px; font-size:0.8rem; font-weight:500;">
+              <i style="display:inline-block; width:12px; height:12px; border-radius:2px; background:${siteColor(s)}; border:1px solid rgba(0,0,0,0.15);"></i>${esc(s)}
+           </span>`
+      ).join('') 
+    : '';
 }
 
 function selectCell(cell) { document.querySelectorAll('.selected-cell').forEach(c => c.classList.remove('selected-cell')); cell.classList.add('selected-cell'); }
 
-// NUEVA FUNCIÓN: Calcula las horas automáticamente según la actividad y rango de días
 function updateCalculatedHours() {
     const startD = parseInt(document.getElementById('editorStartDay').value) || 1;
     const endD = parseInt(document.getElementById('editorEndDay').value) || startD;
-    const activity = getSelectVal('editorActivity').toUpperCase();
-    
-    // 1. Determinar el rango de días
-    const days = Math.max(1, (endD - startD) + 1);
-    
-    // 2. Determinar las horas base por turno según la actividad
-    let baseHours = 12; // Por defecto para Buque, Gabarra, Tapado u otros
-    if (activity.includes("MUESTREO") || activity.includes("ATESTIGUAMIENTO") || activity.includes("DRAFT")) {
-        baseHours = 4;
-    }
-    
-    // 3. Asignar el resultado al campo en pantalla
-    document.getElementById('editorHours').value = days * baseHours;
+    document.getElementById('editorHours').value = calcHours(getSelectVal('editorActivity'), (endD - startD) + 1);
 }
 
 function openEditor(eid, dix) {
     currentEdit = { empId: eid, dayIdx: dix };
     const p = document.getElementById('monthSelector').value;
     const emp = appData.employees.find(e => e.id == eid);
+    if (!appData.records[p][eid]) appData.records[p][eid] = Array(DAYS_IN_MONTH).fill(null);
     const rec = appData.records[p][eid][dix];
     document.getElementById('modalTitle').innerText = `${emp.name}`;
-    let start = dix + 1; let end = dix + 1; let val = rec ? (parseFloat(rec.amount)||'') : '';
+    let start = dix + 1; let end = dix + 1; let val = rec ? (parseFloat(rec.amount) || '') : '';
     if (rec && rec.span > 1) { end = start + rec.span - 1; }
     document.getElementById('editorStartDay').value = start;
     document.getElementById('editorEndDay').value = end;
+    document.getElementById('editorEndDay').max = daysInMonthOf(p);
     document.getElementById('editorAmount').value = val;
     document.getElementById('editorShift').value = rec ? rec.shift : 'Diurno';
     document.getElementById('editorObs').value = rec ? (rec.obs || '') : '';
     document.getElementById('editorPhantom').checked = rec ? (rec.isPhantom || false) : false;
-    // Si ya tiene horas guardadas las muestra, de lo contrario calcula automáticamente
-    if (rec && rec.hours !== undefined) {
-        document.getElementById('editorHours').value = rec.hours;
-    } else {
-        updateCalculatedHours();
-    }
 
-    // Escuchar cambios de actividad para recalcular
-    document.getElementById('editorActivity').onchange = function() {
-        checkOther('Activity');
-        updateCalculatedHours();
-    };
-    fillSelect('editorRole', ROLES, rec ? rec.role : emp.role);
+    fillSelect('editorRole', ROLES.filter(r => r !== 'Surveyor'), rec ? rec.role : emp.role);
     fillSelectOther('editorSite', appData.sites, rec ? rec.site : '');
     fillSelectOther('editorActivity', appData.activities, rec ? rec.activity : '');
+
+    if (rec && rec.hours !== undefined) document.getElementById('editorHours').value = rec.hours;
+    else updateCalculatedHours();
+
+    document.getElementById('editorActivity').onchange = function () { checkOther('Activity'); updateCalculatedHours(); };
+    document.getElementById('editorEndDay').onchange = updateCalculatedHours;
     document.getElementById('cellEditorModal').classList.add('open');
 }
 
@@ -436,10 +595,12 @@ function copyRecord() {
 }
 
 function pasteRecord() {
-    if (!copiedRecordData) { alert("⚠️ No has copiado ninguna guardia todavía."); return; }
+    if (!copiedRecordData) { notify("No has copiado ninguna guardia todavía."); return; }
+    const p = document.getElementById('monthSelector').value;
     const startD = parseInt(document.getElementById('editorStartDay').value);
     let newEnd = startD + copiedRecordData.span;
-    if (newEnd > 31) newEnd = 31; 
+    const dim = daysInMonthOf(p);
+    if (newEnd > dim) newEnd = dim;
     document.getElementById('editorEndDay').value = newEnd;
     document.getElementById('editorHours').value = copiedRecordData.hours || '';
     document.getElementById('editorAmount').value = copiedRecordData.amount;
@@ -449,7 +610,7 @@ function pasteRecord() {
         document.getElementById('editorSiteOther').value = copiedRecordData.siteOther;
         document.getElementById('editorSiteOther').classList.add('visible');
     } else { document.getElementById('editorSiteOther').classList.remove('visible'); }
-    
+
     document.getElementById('editorActivity').value = copiedRecordData.activity;
     if (copiedRecordData.activity === 'OTRO') {
         document.getElementById('editorActivityOther').value = copiedRecordData.activityOther;
@@ -465,11 +626,12 @@ function deleteRecord() {
     if (!confirm("⚠️ ¿Estás seguro de querer BORRAR esta guardia por completo?")) return;
     const p = document.getElementById('monthSelector').value;
     const startD = parseInt(document.getElementById('editorStartDay').value) - 1;
-    const oldRec = appData.records[p][currentEdit.empId][startD];
-    const oldSpan = oldRec ? (oldRec.span || 1) : 1;
-    for(let i = 0; i < oldSpan; i++) { if(startD + i < 31) { appData.records[p][currentEdit.empId][startD + i] = null; } }
-    save(); closeEditor(); renderTable(p);
-    showToast("🗑️ Guardia eliminada con éxito");
+    const row = normalizeRow(appData.records[p][currentEdit.empId]);
+    appData.records[p][currentEdit.empId] = row;
+    clearSpanAt(row, startD);
+    dbUpdate({ [`records/${p}/${currentEdit.empId}`]: row }, "🗑️ Guardia eliminada con éxito").then(() => {
+        closeEditor(); renderTable(p);
+    });
 }
 
 function saveEditor() {
@@ -477,157 +639,100 @@ function saveEditor() {
     const endD = parseInt(document.getElementById('editorEndDay').value);
     const amount = parseFloat(document.getElementById('editorAmount').value);
     const p = document.getElementById('monthSelector').value;
-    if (endD > 31) { alert("⚠️ ERROR: El mes termina el día 31."); return; }
-    if (endD < startD) { alert("⚠️ ERROR: Fecha final menor a inicial."); return; }
+    const dim = daysInMonthOf(p);
+    if (!endD) { notify("Indica el día final."); return; }
+    if (endD > dim) { notify(`${p} solo tiene ${dim} días.`); return; }
+    if (endD < startD) { notify("Fecha final menor a inicial."); return; }
 
-    let userRow = appData.records[p][currentEdit.empId];
-    if (!userRow) { userRow = Array(31).fill(null); } 
-    else if (userRow.length < 31) { while (userRow.length < 31) { userRow.push(null); } }
+    const userRow = normalizeRow(appData.records[p][currentEdit.empId]);
     appData.records[p][currentEdit.empId] = userRow;
 
     const oldRec = userRow[currentEdit.dayIdx];
     const oldSpan = oldRec ? (oldRec.span || 1) : 1;
-    for(let d=0; d<oldSpan; d++) { if(currentEdit.dayIdx + d < 31) userRow[currentEdit.dayIdx + d] = null; }
+
+    if (amount > 0 && hasConflict(userRow, startD - 1, endD - 1, currentEdit.dayIdx, oldSpan)) {
+        if (!confirm("⚠️ En esos días ya existe otra guardia para este empleado.\n\n¿Quieres REEMPLAZARLA? (Se borrará la guardia anterior completa)")) return;
+    }
+
+    for (let d = 0; d < oldSpan; d++) { if (currentEdit.dayIdx + d < 31) userRow[currentEdit.dayIdx + d] = null; }
+    for (let d = startD - 1; d <= endD - 1; d++) clearSpanAt(userRow, d);
 
     const span = endD - startD + 1;
-    for(let d=startD; d<=endD; d++) { userRow[d-1] = null; } 
-    
     if (amount > 0) {
-            const commonData = { 
-                role: document.getElementById('editorRole').value, 
-                site: getSelectVal('editorSite'), 
-                activity: getSelectVal('editorActivity'), 
-                shift: document.getElementById('editorShift').value, 
-                obs: document.getElementById('editorObs').value, 
-                isPhantom: document.getElementById('editorPhantom').checked,
-                hours: parseFloat(document.getElementById('editorHours').value) || 0
-            };
-            userRow[startD-1] = { amount: amount, span: span, ...commonData };
-            for(let k=1; k < span; k++) { userRow[startD-1+k] = { amount: 0, linked: true, span: 0, ...commonData }; }
-        }
-    save(); closeEditor(); renderTable(p);
+        const commonData = {
+            role: document.getElementById('editorRole').value,
+            site: getSelectVal('editorSite'),
+            activity: getSelectVal('editorActivity'),
+            shift: document.getElementById('editorShift').value,
+            obs: document.getElementById('editorObs').value,
+            isPhantom: document.getElementById('editorPhantom').checked,
+            hours: parseFloat(document.getElementById('editorHours').value) || 0,
+            ...auditStamp()
+        };
+        userRow[startD - 1] = { amount: amount, span: span, ...commonData };
+        for (let k = 1; k < span; k++) { userRow[startD - 1 + k] = { amount: 0, linked: true, span: 0, ...commonData }; }
+    }
+    dbUpdate({ [`records/${p}/${currentEdit.empId}`]: userRow }).then(() => {
+        closeEditor(); renderTable(p);
+    });
 }
 
+/* =========================================
+   SUGERENCIAS DE GUARDIAS
+========================================= */
 function renderSuggestions() {
     const grid = document.getElementById('suggestionGrid'); grid.innerHTML = '';
-    const p = document.getElementById('monthSelectorSug').value; 
-    const currentYear = p.split(' ')[1];
+    const p = document.getElementById('monthSelectorSug').value;
+    const year = periodYear(p);
     const pIdx = PERIODS.indexOf(p);
+    const prevP = pIdx > 0 ? PERIODS[pIdx - 1] : null;
 
-    // 1. Detectar a nivel global si ya hay alguien "En Guardia" que viva lejos (Nivel 8 o más)
-    const isHighDistanceEnGuardia = appData.employees.some(e => 
-        e.status === "En Guardia" && (e.distanceScore || 5) >= 8
-    );
-    
+    const info = document.querySelector('#tab-sugerencias .legend-info');
+    if (info && !document.getElementById('sugNote')) {
+        const n = document.createElement('div'); n.id = 'sugNote'; n.style.cssText = 'margin-top:6px; color:#64748b;';
+        n.innerHTML = '<em>Los montos mostrados son dinero real; para ordenar, el sistema también cuenta las ausencias no justificadas (así quien faltó no sube de prioridad por ello).</em>';
+        info.appendChild(n);
+    }
+
+    const isHighDistanceEnGuardia = appData.employees.some(e => e.status === "En Guardia" && (e.distanceScore || 5) >= 8);
+    const LIMITE_BRECHA = 150;
+
     ROLES.forEach(role => {
         const group = appData.employees.filter(e => e.role === role);
         const activeGroup = group.filter(e => e.status !== "Vacaciones" && e.status !== "Reposo" && e.status !== "Fuera de Servicio");
-        
+
         const ranking = activeGroup.map(emp => {
-            let curReal = 0, curRank = 0; // curReal para mostrar, curRank para ordenar
-            if(p === "DICIEMBRE 2025") {
-                curReal = curRank = (appData.historical2025[emp.id]?.month || 0);
-            } else if(appData.records[p] && appData.records[p][emp.id]) {
-                appData.records[p][emp.id].forEach(r => {
-                    if(r) {
-                        const val = parseFloat(r.amount) || 0;
-                        curRank += val; // El algoritmo de posicionamiento suma todo (real + fantasma)
-                        if(!r.isPhantom) curReal += val; // La vista de la tabla solo suma dinero real
-                    }
-                });
-            }
-            
-            let prevReal = 0, prevRank = 0;
-            if(pIdx > 0) {
-                const prevP = PERIODS[pIdx-1];
-                if(prevP === "DICIEMBRE 2025") { prevReal = prevRank = (appData.historical2025[emp.id]?.month || 0); } 
-                else if(appData.records[prevP] && appData.records[prevP][emp.id]) {
-                    appData.records[prevP][emp.id].forEach(r => {
-                        if(r) {
-                            const val = parseFloat(r.amount) || 0;
-                            prevRank += val; 
-                            if(!r.isPhantom) prevReal += val; 
-                        }
-                    });
-                }
-            }
-            
-            let annReal = 0, annRank = 0;
-            if(p.includes("2025")) { annReal = annRank = (appData.historical2025[emp.id]?.year || 0); }
-            else {
-                PERIODS.filter(x => x.includes(currentYear)).forEach(x => { 
-                    if(appData.records[x]&&appData.records[x][emp.id]) {
-                        appData.records[x][emp.id].forEach(r => {
-                            if(r) {
-                                const val = parseFloat(r.amount) || 0;
-                                annRank += val;
-                                if(!r.isPhantom) annReal += val;
-                            }
-                        });
-                    }
-                });
-            }
-            
-            return { 
+            const r = {
                 name: emp.name, status: emp.status, distance: emp.distanceScore || 5, lastOp: getLastOperationalShift(emp.id),
-                cur: curReal, prev: prevReal, ann: annReal, // Para pintar en pantalla (Sin penalizaciones)
-                curRank, prevRank, annRank // Para el cerebro matemático (Con penalizaciones)
+                cur: sumPeriod(emp.id, p, false), prev: prevP ? sumPeriod(emp.id, prevP, false) : 0, ann: sumYear(emp.id, year, false),
+                curRank: sumPeriod(emp.id, p, true), prevRank: prevP ? sumPeriod(emp.id, prevP, true) : 0, annRank: sumYear(emp.id, year, true)
             };
+            r.score = r.curRank + r.prevRank + ((isHighDistanceEnGuardia && r.distance >= 8) ? LIMITE_BRECHA : 0);
+            return r;
         });
-        
-        ranking.sort((a,b) => {
-            // Regla 1: Ocupados van al fondo (Intacta)
-            if (a.status === "En Guardia" && b.status !== "En Guardia") return 1;
-            if (a.status !== "En Guardia" && b.status === "En Guardia") return -1;
 
-            // PRE-CÁLCULO: Extraemos el dinero acumulado de ambos candidatos
-            const bimestralA = a.curRank + a.prevRank;
-            const bimestralB = b.curRank + b.prevRank;
-            
-            // NUEVO: Calculamos la brecha financiera absoluta en dólares
-            const brechaFinanciera = Math.abs(bimestralA - bimestralB);
-            const LIMITE_BRECHA = 150; // El umbral definido por gerencia
-
-            // Regla 2: Transporte condicionado a la Brecha Financiera
-            // La penalización por distancia AHORA exige que la brecha sea <= 150
-            if (isHighDistanceEnGuardia && brechaFinanciera <= LIMITE_BRECHA) {
-                const aIsHigh = a.distance >= 8;
-                const bIsHigh = b.distance >= 8;
-                
-                if (aIsHigh && !bIsHigh) return 1;  // 'a' vive lejos, lo bajamos
-                if (!aIsHigh && bIsHigh) return -1; // 'b' vive lejos, lo bajamos
-            }
-
-            // Regla 3: Ordenamiento financiero (Equidad salarial)
-            // Si la brecha era mayor a 150, la Regla 2 fue ignorada (Bypass)
-            // y el algoritmo pasa directamente a priorizar al que menos dinero tiene.
-            if (bimestralA !== bimestralB) return bimestralA - bimestralB;
-            
-            // Desempate por acumulado anual
+        ranking.sort((a, b) => {
+            const busyA = a.status === "En Guardia", busyB = b.status === "En Guardia";
+            if (busyA !== busyB) return busyA ? 1 : -1;
+            if (a.score !== b.score) return a.score - b.score;
             return a.annRank - b.annRank;
         });
 
         const thresh = role === 'Inspector' ? 4 : 2;
         let rows = '';
         ranking.forEach((r, i) => {
-            const isLow = (i < thresh && r.status !== "En Guardia"); 
-            let nextInfo = '';
-            if(r.lastOp) { nextInfo = `<span class="shift-info">Últ: <span class="badge-shift ${r.lastOp.shift==='Diurno'?'shift-day':'shift-night'}">${r.lastOp.shift.substring(0,1)}</span> (${r.lastOp.activity.substring(0,6)}..)</span>`; }
-            else { nextInfo = '<span class="shift-info" style="color:#cbd5e1">-</span>'; }
-            
-            let statusBadge = '';
-            if(r.status === "En Guardia") statusBadge = `<span class="badge-status-busy">⚠️ OCUPADO</span>`;
-            
-            // 3. Indicador visual para saber rápidamente quién tiene un puntaje alto de distancia
-            let distanceBadge = r.distance >= 8 ? `<span title="Distancia: ${r.distance}/10" style="font-size:0.7rem;">🚗 Lejos</span> ` : '';
-
-            // 4. Inyección del indicador en la celda del nombre
-            rows += `<tr style="${r.status==='En Guardia'?'background:#fffbeb; opacity:0.7':''}"><td>${statusBadge} ${isLow ? '<span class="badge-low">BAJO</span> ' : ''}<b>${r.name}</b> ${distanceBadge}${nextInfo}</td><td class="money" style="color:${r.cur<1?'#dc2626':'#16a34a'}">$${r.cur}</td><td class="money prev-month">$${r.prev}</td><td class="money" style="color:var(--accent)">$${r.ann}</td></tr>`;
+            const isLow = (i < thresh && r.status !== "En Guardia");
+            let nextInfo;
+            if (r.lastOp) nextInfo = `<span class="shift-info">Últ: <span class="badge-shift ${r.lastOp.shift === 'Diurno' ? 'shift-day' : 'shift-night'}">${r.lastOp.shift.substring(0, 1)}</span> (${esc(r.lastOp.activity.substring(0, 6))}..)</span>`;
+            else nextInfo = '<span class="shift-info" style="color:#cbd5e1">-</span>';
+            const statusBadge = r.status === "En Guardia" ? `<span class="badge-status-busy">⚠️ OCUPADO</span>` : '';
+            const distanceBadge = r.distance >= 8 ? `<span title="Distancia: ${r.distance}/10" style="font-size:0.7rem;">🚗 Lejos</span> ` : '';
+            rows += `<tr style="${r.status === 'En Guardia' ? 'background:#fffbeb; opacity:0.7' : ''}"><td>${statusBadge} ${isLow ? '<span class="badge-low">BAJO</span> ' : ''}<b>${esc(r.name)}</b> ${distanceBadge}${nextInfo}</td><td class="money" style="color:${r.cur < 1 ? '#dc2626' : '#16a34a'}">$${r.cur}</td><td class="money prev-month">$${r.prev}</td><td class="money" style="color:var(--accent)">$${r.ann}</td></tr>`;
         });
-        
-        const card = document.createElement('div'); card.className='dash-card';
-        card.id = `card-sug-${role}`; 
-        card.innerHTML = `<div class="dash-title">${role}</div><table class="rank-table" id="table-sug-${role}"><thead><tr><th>Nombre</th><th>Mes Actual</th><th>Mes Ant.</th><th>Anual</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+        const card = document.createElement('div'); card.className = 'dash-card';
+        card.id = `card-sug-${role}`;
+        card.innerHTML = `<div class="dash-title">${esc(role)}</div><table class="rank-table" id="table-sug-${role}"><thead><tr><th>Nombre</th><th>Mes Actual</th><th>Mes Ant.</th><th>Anual</th></tr></thead><tbody>${rows}</tbody></table>`;
         grid.appendChild(card);
     });
 }
@@ -636,132 +741,301 @@ function printSuggestions() {
     const printArea = document.getElementById('printSuggestionsSection');
     const p = document.getElementById('monthSelectorSug').value;
     printArea.innerHTML = '';
-    
+
     let html = `<div class="sug-header">REPORTE DE ASIGNACIÓN DE GUARDIAS</div>`;
-    html += `<div class="sug-sub">Generado el: ${new Date().toLocaleDateString()} | Periodo Base: ${p}</div>`;
-    html += `<div style="font-size:9pt; margin-bottom:15px;"><i>Nota: Ordenados por prioridad de asignación (Menor suma Bimestral [Mes Actual + Anterior] > Menor Anual). El sistema penaliza a candidatos lejanos (🚗) si ya existe personal en guardia a gran distancia.</i></div>`;
-    
-    const pluralMap = { "Supervisor": "Supervisores", "Tecnico de Seguridad": "Técnicos de Seguridad", "Inspector": "Inspectores" };
-    
+    html += `<div class="sug-sub">Generado el: ${new Date().toLocaleDateString()} | Periodo Base: ${esc(p)}</div>`;
+    html += `<div style="font-size:9pt; margin-bottom:15px;"><i>Nota: Ordenados por prioridad de asignación.</i></div>`;
+
+    const pluralMap = { "Supervisor": "Supervisores", "Tecnico de Seguridad": "Técnicos de Seguridad", "Inspector": "Inspectores", "Surveyor": "Surveyors" };
+
     ROLES.forEach(role => {
         const cardTable = document.getElementById(`table-sug-${role}`);
         if (cardTable) {
             const title = pluralMap[role] || role + "s";
-            html += `<div class="print-block">`; 
-            html += `<h3 style="margin-bottom:5px; border-bottom:1px solid #ccc; page-break-after: avoid;">${title}</h3>`;
-            html += `<table class="sug-print-table">`;
-            html += `<thead><tr style="background:#f1f5f9;"><th>Nombre</th><th style="text-align:right;">Mes Actual</th><th style="text-align:right;">Mes Ant.</th><th style="text-align:right;">Anual</th><th>Última Actividad</th><th>Estatus</th></tr></thead><tbody>`;
-            
-            const rows = cardTable.querySelectorAll('tbody tr');
-            rows.forEach(r => {
+            html += `<div class="print-block"><h3 style="margin-bottom:5px; border-bottom:1px solid #ccc; page-break-after: avoid;">${title}</h3><table class="sug-print-table"><thead><tr style="background:#f1f5f9;"><th>Nombre</th><th style="text-align:right;">Mes Actual</th><th style="text-align:right;">Mes Ant.</th><th style="text-align:right;">Anual</th><th>Última Actividad</th><th>Estatus</th></tr></thead><tbody>`;
+
+            cardTable.querySelectorAll('tbody tr').forEach(r => {
                 const cells = r.querySelectorAll('td');
                 const nameText = cells[0].querySelector('b').innerText;
                 const lastTurn = cells[0].querySelector('.shift-info') ? cells[0].querySelector('.shift-info').innerText : '-';
-                const badgeBusy = cells[0].querySelector('.badge-status-busy') ? 'OCUPADO' : 'DISPONIBLE';
-                
-                // NUEVO: Detectar si el empleado tiene la etiqueta de distancia en el HTML
+                const busy = !!cells[0].querySelector('.badge-status-busy');
                 const isLejos = cells[0].innerHTML.includes('🚗 Lejos');
                 const printDistance = isLejos ? ' <span style="font-size:7pt; border:1px solid #ccc; padding:1px 3px; border-radius:3px; color:#b45309; background:#fffbeb; margin-left:5px;">🚗 Lejos</span>' : '';
-
-                html += `<tr>
-                    <td><b>${nameText}</b>${printDistance}</td>
-                    <td style="text-align:right;">${cells[1].innerText}</td>
-                    <td style="text-align:right;">${cells[2].innerText}</td>
-                    <td style="text-align:right;">${cells[3].innerText}</td>
-                    <td>${lastTurn}</td>
-                    <td>${badgeBusy === 'OCUPADO' ? '<span class="badge-print">OCUPADO</span>' : 'DISPONIBLE'}</td>
-                </tr>`;
+                html += `<tr><td><b>${esc(nameText)}</b>${printDistance}</td><td style="text-align:right;">${esc(cells[1].innerText)}</td><td style="text-align:right;">${esc(cells[2].innerText)}</td><td style="text-align:right;">${esc(cells[3].innerText)}</td><td>${esc(lastTurn)}</td><td>${busy ? '<span class="badge-print">OCUPADO</span>' : 'DISPONIBLE'}</td></tr>`;
             });
             html += `</tbody></table></div>`;
         }
     });
-    
     printArea.innerHTML = html;
-    document.body.classList.add('printing-suggestions');
-    window.print();
-    document.body.classList.remove('printing-suggestions');
+    document.body.classList.add('printing-suggestions'); window.print(); document.body.classList.remove('printing-suggestions');
 }
+function printPayroll() { document.body.classList.add('printing-payroll'); window.print(); document.body.classList.remove('printing-payroll'); }
 
-function printPayroll() {
-    document.body.classList.add('printing-payroll');
-    window.print();
-    document.body.classList.remove('printing-payroll');
+/* =========================================
+   REPORTE GERENCIAL
+========================================= */
+function emptyRoleObj() { return { 'Supervisor': 0, 'Tecnico de Seguridad': 0, 'Inspector': 0, 'Surveyor': 0 }; }
+function capPeriodKey(p) { const { mi, year } = parsePeriod(p); return mi < 0 ? p : `${MESES_CAP[mi]} ${year}`; }
+function transportTotalOf(p) {
+    const arr = appData.transporte && appData.transporte[capPeriodKey(p)];
+    return Array.isArray(arr) ? arr.reduce((s, v) => s + (parseFloat(v.monto) || 0), 0) : 0;
 }
 
 function renderAnalytics() {
-    let stats = { 2025: { total: 0, roles: { 'Supervisor':0, 'Tecnico de Seguridad':0, 'Inspector':0 } }, 2026: { total: 0, roles: { 'Supervisor':0, 'Tecnico de Seguridad':0, 'Inspector':0 } } };
-    let siteMap = {};
-    let monthStats = {};
+    const stats = {}; const siteMap = {}; const monthStats = {};
+    const ensureYear = y => { if (!stats[y]) stats[y] = { total: 0, roles: emptyRoleObj() }; return stats[y]; };
+    ensureYear(2025); ensureYear(2026);
+
     appData.employees.forEach(emp => {
         const hist = appData.historical2025[emp.id];
         if (hist && hist.year > 0) {
-            stats[2025].total += hist.year;
-            if(stats[2025].roles[emp.role] !== undefined) stats[2025].roles[emp.role] += hist.year;
+            const s = ensureYear(2025); s.total += hist.year;
+            if (s.roles[emp.role] !== undefined) s.roles[emp.role] += hist.year;
         }
     });
+
     PERIODS.forEach(p => {
-        if(!appData.records[p]) return;
-        const year = p.includes("2025") ? 2025 : 2026;
-        if (year === 2026) { if (!monthStats[p]) monthStats[p] = { total: 0, roles: { 'Supervisor':0, 'Tecnico de Seguridad':0, 'Inspector':0 } }; }
-        Object.keys(appData.records[p]).forEach(eId => {
+        const recs = appData.records[p];
+        if (!recs) return;
+        const year = periodYear(p);
+        const ys = ensureYear(year);
+        if (year > 2025 && !monthStats[p]) monthStats[p] = { total: 0, roles: emptyRoleObj(), hours: 0, absences: 0 };
+        Object.keys(recs).forEach(eId => {
             const emp = appData.employees.find(x => x.id == eId);
-            if(!emp) return;
-            appData.records[p][eId].forEach(r => {
-                if(r && !r.isPhantom && (parseFloat(r.amount) > 0)) {
-                    const amtNum = parseFloat(r.amount);
-                    stats[year].total += amtNum;
-                    let actualRole = r.role || emp.role;
-                    if(stats[year].roles[actualRole] !== undefined) { stats[year].roles[actualRole] += amtNum; }
-                    if (year === 2026) {
-                        monthStats[p].total += amtNum;
-                        if(monthStats[p].roles[actualRole] !== undefined) { monthStats[p].roles[actualRole] += amtNum; }
-                    }
-                    if(!siteMap[r.site]) siteMap[r.site] = 0; siteMap[r.site] += amtNum;
+            if (!emp) return;
+            (recs[eId] || []).forEach(r => {
+                if (!r) return;
+                const amtNum = parseFloat(r.amount) || 0;
+                if (r.isPhantom) { if (r.span > 0 && amtNum > 0 && monthStats[p]) monthStats[p].absences++; return; }
+                if (amtNum <= 0) return;
+                ys.total += amtNum;
+                const actualRole = r.role || emp.role;
+                if (ys.roles[actualRole] !== undefined) ys.roles[actualRole] += amtNum;
+                if (monthStats[p]) {
+                    monthStats[p].total += amtNum;
+                    monthStats[p].hours += parseFloat(r.hours) || 0;
+                    if (monthStats[p].roles[actualRole] !== undefined) monthStats[p].roles[actualRole] += amtNum;
                 }
+                const siteName = r.site || r.muelle || '(Sin sitio)';
+                siteMap[siteName] = (siteMap[siteName] || 0) + amtNum;
             });
         });
     });
-    const container = document.getElementById('analyticsContainer');
-    container.innerHTML = `${renderYearCard(2025, stats[2025])}${renderYearCard(2026, stats[2026])}`;
-    const monthContainer = document.getElementById('monthlyAnalyticsContainer');
-    let monthHtml = '';
-    Object.keys(monthStats).forEach(m => {
-        if (monthStats[m].total > 0) { monthHtml += renderMonthCard(m, monthStats[m]); }
-    });
-    monthContainer.innerHTML = monthHtml;
-    const sitesContainer = document.getElementById('sitesChart'); sitesContainer.innerHTML = '';
-    const totalGlobal = stats[2025].total + stats[2026].total;
-    Object.keys(siteMap).sort((a,b)=>siteMap[b]-siteMap[a]).forEach(s => {
-        const pct = totalGlobal > 0 ? (siteMap[s] / totalGlobal) * 100 : 0;
-        const row = document.createElement('div'); row.className = 'bar-chart-row';
-        row.innerHTML = `<div class="bar-label" title="${s}">${s}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%">$${siteMap[s].toLocaleString()}</div></div>`;
-        sitesContainer.appendChild(row);
-    });
+
+    const years = Object.keys(stats).map(Number).sort((a, b) => a - b).filter(y => y === 2025 || y === 2026 || stats[y].total > 0 || y === new Date().getFullYear());
+    document.getElementById('analyticsContainer').innerHTML = years.map(y => renderYearCard(y, stats[y])).join('');
+
+    renderMonthlyAnalytics();
+    renderDispersion(document.getElementById('monthlyAnalyticsContainer'));
+    renderSitesChart();
     renderAnalyticsCharts();
 }
 
-function renderMonthCard(month, data) {
-    const rolesHtml = Object.keys(data.roles)
-        .filter(r => data.roles[r] > 0)
-        .map(r => `<div class="role-row"><span>${r}</span><strong>$${data.roles[r].toLocaleString()}</strong></div>`)
-        .join('');
-    return `<div class="month-card"><h4 style="margin:0; color:#10b981">${month}</h4><div class="big-number">$${data.total.toLocaleString()}</div><div style="margin-top:10px; font-size: 0.85rem;">${rolesHtml || '<div style="color:#94a3b8; font-style:italic;">Sin registros</div>'}</div></div>`;
+function renderSitesChart() {
+    const container = document.getElementById('sitesChart');
+    if (!container || !appData || !appData.records) return;
+
+    const siteTotals = {};
+    Object.keys(appData.records).forEach(period => {
+        Object.keys(appData.records[period]).forEach(empId => {
+            const row = appData.records[period][empId];
+            if (Array.isArray(row)) {
+                row.forEach(rec => {
+                    if (rec && (rec.site || rec.muelle) && !rec.isPhantom) {
+                        const site = (rec.site || rec.muelle || '').trim() || '(Sin sitio)';
+                        const amt = Number(rec.amount) || 0;
+                        siteTotals[site] = (siteTotals[site] || 0) + amt;
+                    }
+                });
+            }
+        });
+    });
+
+    const sortedSites = Object.entries(siteTotals).sort((a, b) => b[1] - a[1]);
+    const maxAmount = sortedSites.length > 0 ? sortedSites[0][1] : 1;
+
+    let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+    sortedSites.forEach(([site, amount]) => {
+        const pct = Math.max((amount / maxAmount) * 100, 1);
+        const nameClean = esc(site);
+        
+        html += `
+            <div class="bar-chart-row" style="display:flex; align-items:center; margin-bottom:6px;">
+                <span class="bar-label" style="width:130px; text-align:right; padding-right:10px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${nameClean}">${nameClean}</span>
+                <div class="bar-track" style="flex:1; background:#f1f5f9; height:22px; border-radius:4px; overflow:hidden;">
+                    <div class="bar-fill" style="width:${pct}%; height:100%; background:var(--accent); border-radius:4px;"></div>
+                </div>
+                <span class="bar-value" style="color:#1e293b; font-weight:700; min-width:75px; text-align:right; margin-left:10px; font-size:0.85rem;">
+                    $${Number(amount).toLocaleString()}
+                </span>
+            </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderMonthlyAnalytics() {
+    const container = document.getElementById('monthlyAnalyticsContainer');
+    if (!container || !appData || !appData.records) return;
+
+    let html = '';
+    const sortedPeriods = [...PERIODS].filter(p => p !== DEC_2025).sort((a, b) => periodKey(a) - periodKey(b));
+
+    sortedPeriods.forEach((period, idx) => {
+        const recs = appData.records[period];
+        if (!recs) return;
+
+        let totalMes = 0;
+        let hoursTotal = 0;
+        let absencesCount = 0;
+        const roleTotals = emptyRoleObj();
+
+        Object.keys(recs).forEach(empId => {
+            const row = recs[empId];
+            if (Array.isArray(row)) {
+                row.forEach(rec => {
+                    if (!rec) return;
+                    const amt = parseFloat(rec.amount) || 0;
+                    if (rec.isPhantom) {
+                        if (rec.span > 0 && amt > 0) absencesCount++;
+                        return;
+                    }
+                    if (amt <= 0) return;
+                    totalMes += amt;
+                    hoursTotal += parseFloat(rec.hours) || 0;
+                    const role = rec.role || 'Otros';
+                    if (roleTotals[role] !== undefined) roleTotals[role] += amt;
+                });
+            }
+        });
+
+        if (totalMes === 0) return;
+
+        // --- CÁLCULO DE TOTALES DEL MES ANTERIOR (PARA EL MES Y PARA CADA CARGO) ---
+        let prevTotal = 0;
+        const prevRoleTotals = {};
+
+        if (idx > 0) {
+            const prevPeriod = sortedPeriods[idx - 1];
+            if (appData.records[prevPeriod]) {
+                Object.values(appData.records[prevPeriod]).forEach(row => {
+                    if (Array.isArray(row)) {
+                        row.forEach(r => {
+                            if (r && r.amount && !r.isPhantom) {
+                                const amt = parseFloat(r.amount) || 0;
+                                const role = r.role || 'Otros';
+                                prevTotal += amt;
+                                prevRoleTotals[role] = (prevRoleTotals[role] || 0) + amt;
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        // --- ETIQUETA DEL TOTAL DEL MES (SUBIDA / BAJADA GLOBAL) ---
+        let momHtml = '';
+        if (prevTotal > 0) {
+            const diffPct = (((totalMes - prevTotal) / prevTotal) * 100).toFixed(1);
+            const isUp = diffPct >= 0;
+            const color = isUp ? '#16a34a' : '#dc2626';
+            const bgColor = isUp ? '#f0fdf4' : '#fef2f2';
+            const icon = isUp ? '▲' : '▼';
+            
+            momHtml = `
+                <div style="display:inline-flex; align-items:center; gap:4px; font-size:0.78rem; font-weight:700; color:${color}; background:${bgColor}; padding:3px 8px; border-radius:12px; margin-bottom:8px;">
+                    <span>${icon}</span>
+                    <span>${Math.abs(diffPct)}% vs mes anterior</span>
+                </div>`;
+        }
+
+        // --- FILAS POR CARGO CON % DEL MES Y VARIACIÓN COLORIZADA VS MES ANTERIOR ---
+        let rolesHtml = '';
+        Object.entries(roleTotals).forEach(([roleName, roleAmt]) => {
+            if (roleAmt <= 0) return;
+            
+            // 1. Porcentaje que representa este cargo dentro del gasto del mes
+            const rolePct = ((roleAmt / (totalMes || 1)) * 100).toFixed(1);
+            
+            // 2. Comparativa individual de este cargo vs mes anterior
+            let roleMomHtml = '';
+            const prevRoleAmt = prevRoleTotals[roleName] || 0;
+
+            if (prevRoleAmt > 0) {
+                const diffRole = (((roleAmt - prevRoleAmt) / prevRoleAmt) * 100).toFixed(1);
+                const isRoleUp = diffRole >= 0;
+                const roleColor = isRoleUp ? '#16a34a' : '#dc2626';
+                const roleIcon = isRoleUp ? '▲' : '▼';
+                
+                roleMomHtml = `<span style="color:${roleColor}; font-size:0.75rem; font-weight:700; margin-left:6px;" title="vs mes anterior en este cargo">${roleIcon} ${Math.abs(diffRole)}%</span>`;
+            } else if (idx > 0) {
+                roleMomHtml = `<span style="color:#2563eb; font-size:0.72rem; font-weight:700; margin-left:6px;" title="Cargo sin registros el mes anterior">★ Nuevo</span>`;
+            }
+
+            rolesHtml += `
+                <div class="role-row" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:0.85rem;">
+                    <span style="display:flex; align-items:center; flex-wrap:wrap;">
+                        <strong>${esc(roleName)}</strong> 
+                        <small style="color:#64748b; font-size:0.75rem; margin-left:4px;" title="Porcentaje dentro de la nómina del mes">(${rolePct}%)</small>
+                        ${roleMomHtml}
+                    </span>
+                    <span style="font-weight:600; color:#1e293b;">$${Number(roleAmt).toLocaleString()}</span>
+                </div>`;
+        });
+
+        const perHour = hoursTotal > 0 ? `<div class="meta" style="font-size:0.78rem; color:#64748b; margin-top:8px;">⏱️ $${(totalMes / hoursTotal).toFixed(2)} por hora (${Math.round(hoursTotal)} h)</div>` : '';
+        const abs = absencesCount > 0 ? `<div class="meta" style="font-size:0.78rem; color:#dc2626; margin-top:2px;">🚫 Ausencias no justificadas: ${absencesCount}</div>` : '';
+        const transp = transportTotalOf(period);
+        const tr = transp > 0 ? `<div class="meta" style="font-size:0.78rem; color:#64748b; margin-top:2px;">🚐 Transporte: $${transp.toLocaleString()} (${((transp / totalMes) * 100).toFixed(1)}% de la nómina)</div>` : '';
+
+        html += `
+            <div class="month-card" style="flex:1; min-width:260px; background:white; border-radius:8px; padding:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.05); border-top:3px solid #10b981;">
+                <h4 style="color:#10b981; margin:0; font-size:1.1rem; text-transform:uppercase;">${esc(period)}</h4>
+                <div class="big-number" style="font-size:1.8rem; font-weight:800; margin:6px 0 2px 0; color:#1e293b;">$${Number(totalMes).toLocaleString()}</div>
+                ${momHtml}
+                <div style="margin-top:8px;">${rolesHtml}</div>
+                ${perHour}${abs}${tr}
+            </div>`;
+    });
+
+    container.innerHTML = html;
+}
+function renderDispersion(afterEl) {
+    let box = document.getElementById('dispersionContainer');
+    if (!box) { box = document.createElement('div'); box.id = 'dispersionContainer'; box.className = 'dash-card mb-20'; afterEl.insertAdjacentElement('afterend', box); }
+    const year = periodYear(document.getElementById('monthSelector').value) || new Date().getFullYear();
+    let rows = '';
+    ROLES.forEach(role => {
+        const vals = appData.employees.filter(e => e.role === role && e.status !== "Fuera de Servicio").map(e => sumYear(e.id, year, false));
+        if (vals.length < 2) return;
+        const min = Math.min(...vals), max = Math.max(...vals), avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+        rows += `<tr><td>${esc(role)}</td><td>${vals.length}</td><td>$${min.toLocaleString()}</td><td>$${Math.round(avg).toLocaleString()}</td><td>$${max.toLocaleString()}</td><td><strong>$${(max - min).toLocaleString()}</strong></td></tr>`;
+    });
+    box.innerHTML = `<h3>⚖️ Equidad de ingresos por cargo — ${year}</h3><table class="disp-table"><thead><tr><th>Cargo</th><th>Personas</th><th>Mínimo</th><th>Promedio</th><th>Máximo</th><th>Brecha</th></tr></thead><tbody>${rows || '<tr><td colspan="6">Sin datos suficientes</td></tr>'}</tbody></table><div class="disp-note">Solo personal activo.</div>`;
+}
+
+function chartPeriodList() {
+    const all = PERIODS.filter(p => p !== DEC_2025);
+    let last = -1;
+    all.forEach((p, i) => { if (periodHasData(p)) last = i; });
+    last = Math.max(last, all.indexOf(currentPeriodName()));
+    return last >= 0 ? all.slice(0, last + 1) : all;
 }
 
 function renderAnalyticsCharts() {
-    const chartPeriods = PERIODS.filter(p => p !== "DICIEMBRE 2025");
+    const chartPeriods = chartPeriodList();
     const monthlyData = chartPeriods.map(p => {
-        let mTotal = 0; let mRoles = { 'Supervisor': 0, 'Tecnico de Seguridad': 0, 'Inspector': 0 };
-        if(appData.records[p]) {
+        let mTotal = 0; const mRoles = emptyRoleObj();
+        if (appData.records[p]) {
             Object.keys(appData.records[p]).forEach(eId => {
                 const emp = appData.employees.find(x => x.id == eId);
-                if(!emp) return;
-                appData.records[p][eId].forEach(r => {
-                    if(r && !r.isPhantom && (parseFloat(r.amount) > 0)) {
+                if (!emp) return;
+                (appData.records[p][eId] || []).forEach(r => {
+                    if (r && !r.isPhantom && (parseFloat(r.amount) > 0)) {
                         const amtNum = parseFloat(r.amount);
                         mTotal += amtNum;
-                        let actualRole = r.role || emp.role;
-                        if(mRoles[actualRole] !== undefined) mRoles[actualRole] += amtNum;
+                        const actualRole = r.role || emp.role;
+                        if (mRoles[actualRole] !== undefined) mRoles[actualRole] += amtNum;
                     }
                 });
             });
@@ -775,272 +1049,348 @@ function renderAnalyticsCharts() {
     const roleSeries = [
         { name: "Supervisor", values: monthlyData.map(d => d.roles['Supervisor']), color: ROLE_COLORS['Supervisor'], id: "r-sup", visible: !hiddenSeries["r-sup"] },
         { name: "Técnico", values: monthlyData.map(d => d.roles['Tecnico de Seguridad']), color: ROLE_COLORS['Tecnico de Seguridad'], id: "r-tec", visible: !hiddenSeries["r-tec"] },
-        { name: "Inspector", values: monthlyData.map(d => d.roles['Inspector']), color: ROLE_COLORS['Inspector'], id: "r-ins", visible: !hiddenSeries["r-ins"] }
+        { name: "Inspector", values: monthlyData.map(d => d.roles['Inspector']), color: ROLE_COLORS['Inspector'], id: "r-ins", visible: !hiddenSeries["r-ins"] },
+        { name: "Surveyor", values: monthlyData.map(d => d.roles['Surveyor']), color: ROLE_COLORS['Surveyor'], id: "r-sur", visible: !hiddenSeries["r-sur"] }
     ];
     drawSVG(document.getElementById('chart-RoleMonthly'), document.getElementById('legend-RoleMonthly'), roleSeries, chartPeriods);
 }
 
-function renderYearCard(year, data) { return `<div class="year-card y${year}"><h3 style="margin:0; color:${year===2025?'#475569':'var(--accent)'}">Año ${year}</h3><div class="big-number">$${data.total.toLocaleString()}</div><div style="margin-top:15px;">${Object.keys(data.roles).map(r => `<div class="role-row"><span>${r}</span><strong>$${data.roles[r].toLocaleString()}</strong></div>`).join('')}</div></div>`; }
+function renderYearCard(year, data) {
+    return `<div class="year-card y${year === 2025 ? 2025 : 2026}"><h3 style="margin:0; color:${year === 2025 ? '#475569' : 'var(--accent)'}">Año ${year}</h3><div class="big-number">$${data.total.toLocaleString()}</div><div style="margin-top:15px;">${Object.keys(data.roles).filter(r => data.roles[r] > 0 || r !== 'Surveyor').map(r => `<div class="role-row"><span>${esc(r)}</span><strong>$${data.roles[r].toLocaleString()}</strong></div>`).join('')}</div></div>`;
+}
 
+/* =========================================
+   GRÁFICOS
+========================================= */
 let hiddenSeries = {};
-function toggleSeries(seriesId) { if (hiddenSeries[seriesId]) { delete hiddenSeries[seriesId]; } else { hiddenSeries[seriesId] = true; } renderAllCharts(); renderAnalytics(); }
+function toggleSeries(seriesId) {
+    if (hiddenSeries[seriesId]) delete hiddenSeries[seriesId]; else hiddenSeries[seriesId] = true;
+    if (isTabActive('graficos')) renderAllCharts(); else renderAnalyticsCharts();
+}
 function renderAllCharts() { renderChart('Supervisor'); renderChart('Tecnico de Seguridad'); renderChart('Inspector'); }
 
 function renderChart(roleFilter) {
     const idBase = roleFilter.split(' ')[0];
-    const container = document.getElementById(`chart-${idBase}`); const legCont = document.getElementById(`legend-${idBase}`); 
-    if(!container) return; container.innerHTML = ''; legCont.innerHTML = '';
-    const employees = appData.employees.filter(e => e.role === roleFilter);
-    const chartPeriods = PERIODS.filter(p => p !== "DICIEMBRE 2025");
+    const container = document.getElementById(`chart-${idBase}`); const legCont = document.getElementById(`legend-${idBase}`);
+    if (!container) return; container.innerHTML = ''; legCont.innerHTML = '';
+    const chartPeriods = chartPeriodList();
 
-    const dataSeries = employees.map((e, idx) => {
-        const sId = `line-${idBase}-${idx}`;
-        const vals = chartPeriods.map(p => {
-            if(appData.records[p] && appData.records[p][e.id]) return appData.records[p][e.id].reduce((s,r)=>s+(r && !r.isPhantom ? parseFloat(r.amount)||0:0),0);
-            return 0;
-        });
-        return { name: e.name, values: vals, color: PALETTE[idx % PALETTE.length], id: sId, visible: !hiddenSeries[sId] };
+    const dataSeries = [];
+    appData.employees.filter(e => e.role === roleFilter).forEach((e, idx) => {
+        const vals = chartPeriods.map(p => sumPeriod(e.id, p, false));
+        if (e.status === "Fuera de Servicio" && vals.every(v => v === 0)) return;
+        const sId = `line-${idBase}-${e.id}`;
+        dataSeries.push({ name: e.name, values: vals, color: PALETTE[idx % PALETTE.length], id: sId, visible: !hiddenSeries[sId] });
     });
     drawSVG(container, legCont, dataSeries, chartPeriods);
 }
 
 function drawSVG(container, legCont, dataSeries, labels) {
     container.innerHTML = ''; legCont.innerHTML = '';
-    let maxVal = 0; dataSeries.forEach(s => { if(s.visible) maxVal = Math.max(maxVal, ...s.values); });
-    if(maxVal === 0) maxVal = 1000;
-    const w = container.clientWidth; const h = container.clientHeight; const padL=40, padB=25, padT=10; const chW=w-padL-10, chH=h-padB-padT;
+    let maxVal = 0; dataSeries.forEach(s => { if (s.visible && s.values.length) maxVal = Math.max(maxVal, ...s.values); });
+    if (maxVal === 0) maxVal = 1000;
+    const w = container.clientWidth; const h = container.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    const padL = 48, padB = 25, padT = 10; const chW = w - padL - 10, chH = h - padB - padT;
     const ns = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("class", "chart-svg");
-    for(let i=0; i<=5; i++) {
-        const y = (padT+chH) - (i/5*chH); const v = Math.round((i/5)*maxVal);
-        const l = document.createElementNS(ns,"line"); l.setAttribute("x1",padL); l.setAttribute("y1",y); l.setAttribute("x2",w); l.setAttribute("y2",y); l.setAttribute("class","grid-line"); svg.appendChild(l);
-        const t = document.createElementNS(ns,"text"); t.setAttribute("x",padL-5); t.setAttribute("y",y+3); t.setAttribute("text-anchor","end"); t.setAttribute("class","axis-text"); t.textContent = `$${v}`; svg.appendChild(t);
+    for (let i = 0; i <= 5; i++) {
+        const y = (padT + chH) - (i / 5 * chH); const v = Math.round((i / 5) * maxVal);
+        const l = document.createElementNS(ns, "line"); l.setAttribute("x1", padL); l.setAttribute("y1", y); l.setAttribute("x2", w); l.setAttribute("y2", y); l.setAttribute("class", "grid-line"); svg.appendChild(l);
+        const t = document.createElementNS(ns, "text"); t.setAttribute("x", padL - 5); t.setAttribute("y", y + 3); t.setAttribute("text-anchor", "end"); t.setAttribute("class", "axis-text"); t.textContent = `$${v.toLocaleString()}`; svg.appendChild(t);
     }
     const xStep = chW / (labels.length - 1 || 1);
+    const multiYear = new Set(labels.map(periodYear)).size > 1;
     labels.forEach((p, i) => {
         const x = padL + i * xStep;
-        const t = document.createElementNS(ns,"text"); t.setAttribute("x",x); t.setAttribute("y",h-5); t.setAttribute("text-anchor","middle"); t.setAttribute("class","axis-text");
-        t.textContent = p.includes("2025") ? "DIC'25" : p.split(' ')[0].substr(0,3); svg.appendChild(t);
+        const t = document.createElementNS(ns, "text"); t.setAttribute("x", x); t.setAttribute("y", h - 5); t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "axis-text");
+        const yy = String(periodYear(p)).slice(-2);
+        t.textContent = p.split(' ')[0].substr(0, 3) + (multiYear ? `'${yy}` : '');
+        svg.appendChild(t);
     });
     dataSeries.forEach(s => {
-        const li = document.createElement("div"); li.className = `legend-item ${s.visible ? '' : 'inactive'}`; 
-        li.innerHTML=`<div class="legend-color" style="background:${s.color}"></div><div class="legend-text">${s.name}</div>`;
-        li.onclick = () => toggleSeries(s.id); li.onmouseenter=()=> { if(s.visible) highlight(svg,s.id); }; li.onmouseleave=()=> { if(s.visible) unhighlight(svg); }; 
+        const li = document.createElement("div"); li.className = `legend-item ${s.visible ? '' : 'inactive'}`;
+        li.tabIndex = 0;
+        li.innerHTML = `<div class="legend-color" style="background:${s.color}"></div><div class="legend-text">${esc(s.name)}</div>`;
+        li.onclick = () => toggleSeries(s.id);
+        li.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleSeries(s.id); } };
+        li.onmouseenter = () => { if (s.visible) highlight(svg, s.id); }; li.onmouseleave = () => { if (s.visible) unhighlight(svg); };
         legCont.appendChild(li);
-        if(!s.visible) return; 
-        let d=""; s.values.forEach((v,i)=>{ const x=padL+i*xStep; const y=(padT+chH)-(v/maxVal)*chH; d+=(i===0?"M":"L")+` ${x} ${y}`; 
-            const pt=document.createElementNS(ns,"circle"); pt.setAttribute("cx",x); pt.setAttribute("cy",y); pt.setAttribute("r",3); pt.setAttribute("stroke",s.color); pt.setAttribute("class",`chart-point point-${s.id}`);
-            pt.addEventListener('mouseenter',(e)=>showTooltip(e,s.name,labels[i],v)); pt.addEventListener('mouseleave',hideTooltip); svg.appendChild(pt);
+        if (!s.visible) return;
+        let d = ""; s.values.forEach((v, i) => {
+            const x = padL + i * xStep; const y = (padT + chH) - (v / maxVal) * chH; d += (i === 0 ? "M" : "L") + ` ${x} ${y}`;
+            const pt = document.createElementNS(ns, "circle"); pt.setAttribute("cx", x); pt.setAttribute("cy", y); pt.setAttribute("r", 4); pt.setAttribute("stroke", s.color); pt.setAttribute("class", `chart-point point-${s.id}`);
+            pt.addEventListener('mouseenter', (e) => showTooltip(e, s.name, labels[i], v)); pt.addEventListener('mouseleave', hideTooltip);
+            pt.addEventListener('click', (e) => showTooltip(e, s.name, labels[i], v));
+            svg.appendChild(pt);
         });
-        const pth=document.createElementNS(ns,"path"); pth.setAttribute("d",d); pth.setAttribute("stroke",s.color); pth.setAttribute("class",`chart-line line-${s.id}`); svg.prepend(pth);
+        const pth = document.createElementNS(ns, "path"); pth.setAttribute("d", d); pth.setAttribute("stroke", s.color); pth.setAttribute("class", `chart-line line-${s.id}`); svg.prepend(pth);
     });
     container.appendChild(svg);
 }
 
-function highlight(svg, id) { svg.querySelectorAll('.chart-line,.chart-point').forEach(e=>e.classList.add('faded')); svg.querySelectorAll(`.line-${id},.point-${id}`).forEach(e=>{e.classList.remove('faded');e.classList.add('highlight');}); }
-function unhighlight(svg) { svg.querySelectorAll('*').forEach(e=>{e.classList.remove('faded');e.classList.remove('highlight');}); }
-const tt=document.getElementById('globalTooltip');
-function showTooltip(e,n,p,v){tt.style.display='block';tt.style.left=(e.pageX+10)+'px';tt.style.top=(e.pageY-20)+'px';tt.innerHTML=`<strong>${n}</strong><br>${p}: $${v}`;}
-function hideTooltip(){tt.style.display='none';}
+function highlight(svg, id) { svg.querySelectorAll('.chart-line,.chart-point').forEach(e => e.classList.add('faded')); svg.querySelectorAll(`.line-${id},.point-${id}`).forEach(e => { e.classList.remove('faded'); e.classList.add('highlight'); }); }
+function unhighlight(svg) { svg.querySelectorAll('*').forEach(e => { e.classList.remove('faded'); e.classList.remove('highlight'); }); }
 
-function renderL(id,arr,fmt,del){const el=document.getElementById(id);if(!el)return;el.innerHTML='';arr.forEach((x,i)=>{const l=document.createElement('li');l.className='list-item';l.innerHTML=fmt(x);const b=document.createElement('button');b.className='delete-btn';b.innerText='✕';b.onclick=()=>{del(x.id?x.id:i);save();renderConfigLists();};l.appendChild(b);el.appendChild(l);});}
-function renderConfigLists(){
-    renderL('employeeList',appData.employees,e=>`<div style="display:flex;align-items:center;width:100%;gap:10px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:120px;"><b>${e.name}</b></div>
-        
+const tt = document.getElementById('globalTooltip');
+if (tt) {
+    tt.style.whiteSpace = 'pre-line';
+    tt.style.textAlign = 'left';
+}
+
+function positionTooltip(e) {
+    const pad = 12; const tw = tt.offsetWidth || 200; const th = tt.offsetHeight || 60;
+    let x = e.clientX + pad, y = e.clientY - th - 6;
+    if (x + tw > window.innerWidth - 4) x = e.clientX - tw - pad;
+    if (y < 4) y = e.clientY + 18;
+    tt.style.left = Math.max(4, x) + 'px'; tt.style.top = y + 'px';
+}
+
+function showTooltip(e, n, p, v) { 
+    if (!tt) return;
+    tt.style.whiteSpace = 'pre-line';
+    tt.textContent = `${n}\n${p}: $${Number(v).toLocaleString()}`; 
+    tt.style.display = 'block'; 
+    positionTooltip(e); 
+}
+
+function hideTooltip() { if (tt) tt.style.display = 'none'; }
+
+document.addEventListener('mouseover', e => {
+    const el = e.target.closest && e.target.closest('[data-tooltip]');
+    if (!el || !tt) return;
+    tt.style.whiteSpace = 'pre-line';
+    tt.textContent = el.getAttribute('data-tooltip'); 
+    tt.style.display = 'block'; 
+    positionTooltip(e);
+});
+document.addEventListener('mousemove', e => { if (tt.style.display === 'block' && e.target.closest && e.target.closest('[data-tooltip]')) positionTooltip(e); });
+document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('[data-tooltip]')) hideTooltip(); });
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        if (isTabActive('graficos')) renderAllCharts();
+        else if (isTabActive('analytics')) renderAnalyticsCharts();
+    }, 200);
+});
+
+/* =========================================
+   CONFIGURACIÓN: LISTAS
+========================================= */
+function renderL(id, arr, fmt, del) {
+    const el = document.getElementById(id); if (!el) return; el.innerHTML = '';
+    arr.forEach((x, i) => {
+        const l = document.createElement('li'); l.className = 'list-item'; l.innerHTML = fmt(x);
+        const b = document.createElement('button'); b.className = 'delete-btn'; b.innerText = '✕';
+        b.onclick = () => { const r = del(x.id ? x.id : i); if (r === false) return; renderConfigLists(); };
+        l.appendChild(b); el.appendChild(l);
+    });
+}
+
+function renderConfigLists() {
+    renderL('employeeList', appData.employees, e => `<div style="display:flex;align-items:center;width:100%;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;"><b>${esc(e.name)}</b></div>
         <input type="number" class="dist-select" min="1" max="10" title="Distancia (1-10)" value="${e.distanceScore || 5}" onchange="changeDistance(${e.id}, this.value)">
-        
         <select class="role-select" onchange="changeRole(${e.id},this.value)">
-            <option value="Supervisor" ${e.role==='Supervisor'?'selected':''}>Supervisor</option>
-            <option value="Tecnico de Seguridad" ${e.role==='Tecnico de Seguridad'?'selected':''}>Técnico</option>
-            <option value="Inspector" ${e.role==='Inspector'?'selected':''}>Inspector</option>
-            <option value="Surveyor" ${e.role==='Surveyor'?'selected':''}>Surveyor</option>
+            <option value="Supervisor" ${e.role === 'Supervisor' ? 'selected' : ''}>Supervisor</option>
+            <option value="Tecnico de Seguridad" ${e.role === 'Tecnico de Seguridad' ? 'selected' : ''}>Técnico</option>
+            <option value="Inspector" ${e.role === 'Inspector' ? 'selected' : ''}>Inspector</option>
+            <option value="Surveyor" ${e.role === 'Surveyor' ? 'selected' : ''}>Surveyor</option>
         </select>
         <select class="status-select ${getStatusClass(e.status)}" onchange="changeStatus(${e.id},this.value)">
-            <option value="Disponible" ${e.status==='Disponible'?'selected':''}>🟢 Disp.</option>
-            <option value="En Guardia" ${e.status==='En Guardia'?'selected':''}>🟡 Guardia</option>
-            <option value="Vacaciones" ${e.status==='Vacaciones'?'selected':''}>🔴 Vacac.</option>
-            <option value="Reposo" ${e.status==='Reposo'?'selected':''}>🔴 Reposo</option>
-            <option value="No Justificado" ${e.status==='No Justificado'?'selected':''}>🔴 No Just.</option>
-            <option value="Fuera de Servicio" ${e.status==='Fuera de Servicio'?'selected':''}>⚫ Inactivo</option>
+            <option value="Disponible" ${e.status === 'Disponible' ? 'selected' : ''}>🟢 Disp.</option>
+            <option value="En Guardia" ${e.status === 'En Guardia' ? 'selected' : ''}>🟡 Guardia</option>
+            <option value="Vacaciones" ${e.status === 'Vacaciones' ? 'selected' : ''}>🔴 Vacac.</option>
+            <option value="Reposo" ${e.status === 'Reposo' ? 'selected' : ''}>🔴 Reposo</option>
+            <option value="No Justificado" ${e.status === 'No Justificado' ? 'selected' : ''}>🔴 No Just.</option>
+            <option value="Fuera de Servicio" ${e.status === 'Fuera de Servicio' ? 'selected' : ''}>⚫ Inactivo</option>
         </select>
-    </div>`,(id)=>{deleteEmployee(id);});
-    
-    renderL('siteList',appData.sites,s=>s,i=>appData.sites.splice(i,1));
-    renderL('activityList',appData.activities,a=>a,i=>appData.activities.splice(i,1));
+    </div>`, (id) => deleteEmployee(id));
+
+    renderL('siteList', appData.sites, s => esc(s), i => { appData.sites.splice(i, 1); dbUpdate({ 'sites': appData.sites }); });
+    renderL('activityList', appData.activities, a => esc(a), i => { appData.activities.splice(i, 1); dbUpdate({ 'activities': appData.activities }); });
 }
-function getStatusClass(s){if(s==='Disponible')return 'st-active';if(s==='En Guardia')return 'st-busy';if(s==='Fuera de Servicio')return 'st-inactive';return 'st-vacation';}
-function fillSelect(id,opts,sel){const el=document.getElementById(id);el.innerHTML='';opts.forEach(o=>{const op=document.createElement('option');op.value=o;op.innerText=o;if(o===sel)op.selected=true;el.appendChild(op);});}
-function fillSelectOther(id,opts,sel){const el=document.getElementById(id);el.innerHTML='';let found=false;opts.forEach(o=>{const op=document.createElement('option');op.value=o;op.innerText=o;if(o===sel){op.selected=true;found=true;}el.appendChild(op);});const otherOp=document.createElement('option');otherOp.value='OTRO';otherOp.innerText='OTRO (Escribir manual)';el.appendChild(otherOp);const baseId=id.replace('editor','');const otherInput=document.getElementById(id+'Other');if(sel&&!found){el.value='OTRO';otherInput.value=sel;otherInput.classList.add('visible');}else{otherInput.classList.remove('visible');otherInput.value='';}}
-function checkOther(type){const sel=document.getElementById('editor'+type);const inp=document.getElementById('editor'+type+'Other');if(sel.value==='OTRO')inp.classList.add('visible');else inp.classList.remove('visible');}
-function getSelectVal(id){const sel=document.getElementById(id);if(sel.value==='OTRO')return document.getElementById(id+'Other').value.toUpperCase();return sel.value;}
-function addEmployee(){
-    const n = document.getElementById('newEmpName').value.toUpperCase();
-    const dist = parseInt(document.getElementById('newEmpDistance').value) || 5; // 5 por defecto
-    if(n){
-        appData.employees.push({
-            id: Date.now(),
-            name: n,
-            role: document.getElementById('newEmpRole').value,
-            status: 'Disponible',
-            distanceScore: dist // Guardamos la distancia inicial
-        });
-        save();
-        renderConfigLists();
-        document.getElementById('newEmpName').value='';
-        document.getElementById('newEmpDistance').value='';
-    }
+
+function getStatusClass(s) { if (s === 'Disponible') return 'st-active'; if (s === 'En Guardia') return 'st-busy'; if (s === 'Fuera de Servicio') return 'st-inactive'; return 'st-vacation'; }
+function fillSelect(id, opts, sel) { const el = document.getElementById(id); el.innerHTML = ''; opts.forEach(o => { const op = document.createElement('option'); op.value = o; op.innerText = o; if (o === sel) op.selected = true; el.appendChild(op); }); }
+function fillSelectOther(id, opts, sel) {
+    const el = document.getElementById(id); el.innerHTML = ''; let found = false;
+    opts.forEach(o => { const op = document.createElement('option'); op.value = o; op.innerText = o; if (o === sel) { op.selected = true; found = true; } el.appendChild(op); });
+    const otherOp = document.createElement('option'); otherOp.value = 'OTRO'; otherOp.innerText = 'OTRO (Escribir manual)'; el.appendChild(otherOp);
+    const otherInput = document.getElementById(id + 'Other');
+    if (sel && !found) { el.value = 'OTRO'; otherInput.value = sel; otherInput.classList.add('visible'); }
+    else { otherInput.classList.remove('visible'); otherInput.value = ''; }
 }
-function addSite(){const n=document.getElementById('newSiteName').value.toUpperCase();if(n&&!appData.sites.includes(n)){appData.sites.push(n);save();renderConfigLists();document.getElementById('newSiteName').value='';}}
-function addActivity(){const n=document.getElementById('newActivityName').value.toUpperCase();if(n&&!appData.activities.includes(n)){appData.activities.push(n);save();renderConfigLists();document.getElementById('newActivityName').value='';}}
-function getLastOperationalShift(empId){const currentP=document.getElementById('monthSelectorSug').value;const pIdx=PERIODS.indexOf(currentP);for(let i=pIdx;i>=0;i--){const pName=PERIODS[i];if(pName==="DICIEMBRE 2025")continue;const userRecs=appData.records[pName][empId];if(!userRecs)continue;for(let d=30;d>=0;d--){const rec=userRecs[d];if(rec&&rec.activity){const actUpper=rec.activity.toUpperCase();let ignored=false;for(let ign of IGNORE_SHIFT_ACTIVITIES)if(actUpper.includes(ign))ignored=true;if(!ignored&&(rec.shift==='Diurno'||rec.shift==='Nocturno'))return{shift:rec.shift,activity:rec.activity,date:`Dia ${d+1} ${pName.slice(0,3)}`};}}}return null;}
-function changeStatus(id,newStatus){const emp=appData.employees.find(e=>e.id==id);if(emp){emp.status=newStatus;save();renderSuggestions();}}
-function changeRole(id,newRole){const emp=appData.employees.find(e=>e.id==id);if(emp){emp.role=newRole;save();renderConfigLists();renderSuggestions();renderAllCharts();renderAnalytics();}}
-function setAllAvailable(){if(!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?"))return;appData.employees.forEach(e=>e.status="Disponible");save();renderConfigLists();renderSuggestions();alert("Todo el personal está ahora disponible.");}
-function deleteEmployee(id){if(confirm('¿Eliminar empleado? Esto borrará su historial.')){appData.employees=appData.employees.filter(e=>e.id!==id);save();renderConfigLists();}}
-function exportToExcel() {
-    const p = document.getElementById('monthSelector').value;
-    const currentYear = p.split(' ')[1];
-    
-    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
-    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
-    
-    html += '<thead style="background-color: #f8fafc;"><tr>';
-    html += '<th style="font-weight:bold; width: 200px;">EMPLEADO</th>';
-    for (let i = 1; i <= 31; i++) { html += `<th style="font-weight:bold;">${i}</th>`; }
-    html += '<th style="font-weight:bold;">TOTAL MES</th>';
-    html += '<th style="font-weight:bold;">ACUM. ANUAL</th>';
-    html += '<th style="font-weight:bold;">HORAS MES</th>';
-    html += '<th style="font-weight:bold;">HORAS AÑO</th>';
-    html += '</tr></thead><tbody>';
+function checkOther(type) { const sel = document.getElementById('editor' + type); const inp = document.getElementById('editor' + type + 'Other'); if (sel.value === 'OTRO') inp.classList.add('visible'); else inp.classList.remove('visible'); }
+function getSelectVal(id) { const sel = document.getElementById(id); if (sel.value === 'OTRO') return document.getElementById(id + 'Other').value.toUpperCase(); return sel.value; }
 
-    let rowIndex = 2; 
+function addEmployee() {
+    const n = document.getElementById('newEmpName').value.trim().toUpperCase();
+    const dist = Math.min(10, Math.max(1, parseInt(document.getElementById('newEmpDistance').value) || 5));
+    if (!n) return;
+    if (appData.employees.some(e => e.name === n) && !confirm(`Ya existe un empleado llamado "${n}". ¿Agregar de todos modos?`)) return;
+    appData.employees.push({ id: Date.now(), name: n, role: document.getElementById('newEmpRole').value, status: 'Disponible', distanceScore: dist });
+    dbUpdate({ 'employees': appData.employees }).then(renderConfigLists);
+    document.getElementById('newEmpName').value = ''; document.getElementById('newEmpDistance').value = '';
+}
+function addSite() { const n = document.getElementById('newSiteName').value.trim(); if (n && !appData.sites.includes(n)) { appData.sites.push(n); dbUpdate({ 'sites': appData.sites }).then(renderConfigLists); document.getElementById('newSiteName').value = ''; } }
+function addActivity() { const n = document.getElementById('newActivityName').value.trim().toUpperCase(); if (n && !appData.activities.includes(n)) { appData.activities.push(n); dbUpdate({ 'activities': appData.activities }).then(renderConfigLists); document.getElementById('newActivityName').value = ''; } }
 
-    appData.employees.forEach(emp => {
-        const filter = document.getElementById('searchPayroll').value.toUpperCase();
-        if (filter && !emp.name.includes(filter)) return;
-
-        let mTotal = 0; let mHours = 0;
-        let cells = '';
-        const userRecs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
-
-        for (let i = 0; i < 31; i++) {
-            const rec = userRecs[i];
-            if (rec && rec.span > 1) {
-                const amtNum = parseFloat(rec.amount) || 0;
-                const hrsNum = parseFloat(rec.hours) || 0;
-                if (!rec.isPhantom) {
-                    mTotal += amtNum;
-                    mHours += hrsNum;
-                }
-                
-                const cellText = rec.isPhantom ? "X" : amtNum;
-                cells += `<td colspan="${rec.span}" style="text-align:center; background-color: #e2e8f0;" x:num>${cellText}</td>`;
-                i += (rec.span - 1);
-            } else if (rec && rec.linked) {
-            
-            } else {
-                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
-                const hrs = rec ? (parseFloat(rec.hours) || 0) : 0;
-                if (!rec || !rec.isPhantom) {
-                    mTotal += amt;
-                    mHours += hrs;
-                }
-                
-                let text = "";
-                if (rec && rec.isPhantom) text = "X";
-                else if (amt > 0) text = amt;
-                
-                cells += `<td style="text-align:center;" x:num>${text}</td>`;
+function getLastOperationalShift(empId) {
+    const currentP = document.getElementById('monthSelectorSug').value; const pIdx = PERIODS.indexOf(currentP);
+    for (let i = pIdx; i >= 0; i--) {
+        const pName = PERIODS[i]; if (pName === DEC_2025) continue;
+        const userRecs = appData.records[pName] && appData.records[pName][empId]; if (!userRecs) continue;
+        for (let d = 30; d >= 0; d--) {
+            const rec = userRecs[d];
+            if (rec && rec.activity) {
+                const actUpper = rec.activity.toUpperCase(); let ignored = false;
+                for (let ign of IGNORE_SHIFT_ACTIVITIES) if (actUpper.includes(ign)) ignored = true;
+                if (!ignored && (rec.shift === 'Diurno' || rec.shift === 'Nocturno')) return { shift: rec.shift, activity: rec.activity, date: `Dia ${d + 1} ${pName.slice(0, 3)}` };
             }
         }
-
-        let yTotal = 0; let yHours = 0;
-        PERIODS.filter(x => x.includes(currentYear)).forEach(x => {
-            if (appData.records[x] && appData.records[x][emp.id]) {
-                appData.records[x][emp.id].forEach(r => {
-                    if (r && !r.isPhantom && (parseFloat(r.amount) > 0)) {
-                        yTotal += parseFloat(r.amount) || 0;
-                        yHours += parseFloat(r.hours) || 0;
-                    }
-                });
-            }
-        });
-
-        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
-        html += `<tr>
-            <td><b>${emp.name}</b> - ${emp.role}</td>
-            ${cells}
-            <td style="text-align:center; font-weight:bold; background-color:#f8fafc;" x:num x:fmla="=SUM(B${rowIndex}:AF${rowIndex})">${mTotal}</td>
-            <td style="text-align:center; font-weight:bold; color: #16a34a;" x:num>${yTotal}</td>
-            <td style="text-align:center; font-weight:bold;" x:num>${mHours}</td>
-            <td style="text-align:center; font-weight:bold; color: #16a34a;" x:num>${yHours}</td>
-        </tr>`;
-        
-        rowIndex++;
-    });
-
-    html += '</tbody></table></body></html>';
-    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const downloadLink = document.createElement("a");
-    
-    document.body.appendChild(downloadLink);
-    downloadLink.href = url;
-    downloadLink.download = `Nomina_${p}.xls`;
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
+    }
+    return null;
 }
-/* =========================================
-   LÓGICA EXCLUSIVA PARA SURVEYORS
-========================================= */
+function changeStatus(id, newStatus) { const emp = appData.employees.find(e => e.id == id); if (emp) { emp.status = newStatus; dbUpdate({ 'employees': appData.employees }).then(renderSuggestions); } }
+function changeRole(id, newRole) { const emp = appData.employees.find(e => e.id == id); if (emp) { emp.role = newRole; dbUpdate({ 'employees': appData.employees }).then(() => { renderConfigLists(); renderSuggestions(); renderAllCharts(); renderAnalytics(); }); } }
+function setAllAvailable() { if (!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?")) return; appData.employees.forEach(e => e.status = "Disponible"); dbUpdate({ 'employees': appData.employees }, "♻️ Todo el personal está ahora disponible.").then(() => { renderConfigLists(); renderSuggestions(); }); }
 
+function deleteEmployee(id) {
+    const emp = appData.employees.find(e => e.id == id);
+    if (!emp) return false;
+    if (emp.status !== "Fuera de Servicio") {
+        if (!confirm(`¿Dar de baja a ${emp.name}?\n\nPasará a INACTIVO y se conserva todo su historial y sus totales.`)) return false;
+        emp.status = "Fuera de Servicio";
+        dbUpdate({ 'employees': appData.employees }).then(renderSuggestions);
+        return true;
+    }
+    if (!confirm(`⚠️ BORRAR DEFINITIVAMENTE a ${emp.name}? Se perderá su historial.`)) return false;
+    appData.employees = appData.employees.filter(e => e.id != id);
+    dbUpdate({ 'employees': appData.employees }).then(renderSuggestions);
+    return true;
+}
+
+/* =========================================
+   EXPORTACIÓN A EXCEL (.xlsx real con SheetJS)
+========================================= */
+function loadXlsxLib() {
+    return new Promise((res, rej) => {
+        if (window.XLSX) return res(window.XLSX);
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload = () => res(window.XLSX); s.onerror = () => rej(new Error('No se pudo cargar SheetJS'));
+        document.head.appendChild(s);
+    });
+}
+async function saveXlsx(filename, sheetName, aoa, opts) {
+    opts = opts || {};
+    try {
+        const X = await loadXlsxLib();
+        const ws = X.utils.aoa_to_sheet(aoa);
+        if (opts.merges && opts.merges.length) ws['!merges'] = opts.merges;
+        if (opts.cols) ws['!cols'] = opts.cols.map(w => ({ wch: w }));
+        (opts.formulas || []).forEach(f => { ws[X.utils.encode_cell({ r: f.r, c: f.c })] = { t: 'n', f: f.f, v: f.v }; });
+        const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, sheetName);
+        X.writeFile(wb, filename);
+    } catch (e) {
+        console.error(e); notify('No se pudo generar el Excel (revisa tu red).');
+    }
+}
+
+function exportToExcel() {
+    const p = document.getElementById('monthSelector').value;
+    if (p === DEC_2025) { notify('Diciembre 2025 es solo un cierre; no tiene detalle diario para exportar.'); return; }
+    const year = periodYear(p);
+    const filter = document.getElementById('searchPayroll').value.toUpperCase();
+    const header = ['EMPLEADO']; for (let i = 1; i <= 31; i++) header.push(i);
+    header.push('TOTAL MES', 'ACUM. ANUAL', 'HORAS MES', 'HORAS AÑO');
+    const rows = [header]; const merges = []; const formulas = [];
+
+    appData.employees.forEach(emp => {
+        if (emp.role === "Surveyor") return;
+        if (!matchesPayrollFilter(emp, p, filter)) return;
+        const recs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
+        const r = rows.length; const line = [`${emp.name} - ${emp.role}`]; const localMerges = [];
+        let mTotal = 0, mHours = 0;
+        for (let i = 0; i < 31; i++) {
+            const rec = recs[i];
+            if (rec && rec.span > 1) {
+                const a = parseFloat(rec.amount) || 0, hh = parseFloat(rec.hours) || 0;
+                if (!rec.isPhantom) { mTotal += a; mHours += hh; }
+                const sp = Math.min(rec.span, 31 - i);
+                line.push(rec.isPhantom ? 'X' : a);
+                for (let k = 1; k < sp; k++) line.push(null);
+                localMerges.push({ s: { r, c: 1 + i }, e: { r, c: i + sp } });
+                i += sp - 1;
+            } else if (rec && rec.linked) {
+                line.push(null);
+            } else {
+                const a = rec ? (parseFloat(rec.amount) || 0) : 0, hh = rec ? (parseFloat(rec.hours) || 0) : 0;
+                if (!rec || !rec.isPhantom) { mTotal += a; mHours += hh; }
+                line.push(rec && rec.isPhantom ? 'X' : (a > 0 ? a : null));
+            }
+        }
+        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+        const ys = yearSums(emp.id, year);
+        line.push(mTotal, ys.amt, mHours, ys.hours);
+        rows.push(line); merges.push(...localMerges);
+        formulas.push({ r, c: 32, f: `SUM(B${r + 1}:AF${r + 1})`, v: mTotal });
+    });
+    saveXlsx(`Nomina_${p}.xlsx`, 'Nómina', rows, { merges, formulas, cols: [34, ...Array(31).fill(5), 11, 12, 10, 10] });
+}
+
+/* =========================================
+   SURVEYORS
+========================================= */
 function renderSurveyorTable(period) {
     const tbody = document.getElementById('tableBodySurv');
     const thead = document.getElementById('tableHeaderSurv');
-    if(!tbody || !thead) return;
-    
+    if (!tbody || !thead) return;
+
     tbody.innerHTML = '';
-    if(!appData.records[period]) appData.records[period] = {};
+    if (!appData.records[period]) appData.records[period] = {};
     const filter = document.getElementById('searchSurveyor').value.toUpperCase();
 
     let h = `<th class="sticky-col sticky-col-header" style="text-align:left; min-width:140px;">EMPLEADO (SURVEYOR)</th>`;
-    for(let i=1; i<=31; i++) h += `<th class="day-col">${i}</th>`;
+    for (let i = 1; i <= 31; i++) {
+        const m = dayMeta(period, i);
+        h += `<th class="day-col${m.weekend ? ' day-weekend' : ''}${m.invalid ? ' day-invalid' : ''}"><div>${i}</div><div class="wk">${m.wk}</div></th>`;
+    }
     h += `<th class="center-text">TOTAL MES</th>`;
     thead.innerHTML = h;
 
     let grandTotal = 0;
-
     appData.employees.forEach(emp => {
-        if (emp.role !== "Surveyor") return; // SOLO MUESTRA SURVEYORS
-        if (filter && !emp.name.includes(filter)) return;
+        if (emp.role !== "Surveyor") return;
+        if (filter && !emp.name.toUpperCase().includes(filter)) return;
         if (!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(31).fill(null);
 
-        let mTotal = 0;
-        let cells = '';
-        for(let i=0; i < 31; i++) {
-            const rec = appData.records[period][emp.id][i];
+        let mTotal = 0; let cells = '';
+        for (let i = 0; i < 31; i++) {
+            const rec = appData.records[period][emp.id][i]; const m = dayMeta(period, i + 1);
             if (rec && rec.span > 1) {
                 const amtNum = parseFloat(rec.amount) || 0;
                 mTotal += amtNum;
                 const tooltip = `💵 $${amtNum}\n🚢 Buque: ${rec.vessel || 'N/A'}\n📍 Muelle: ${rec.muelle || 'N/A'}\n⚓ Fondeo: ${rec.fondeo || 'N/A'}\n🛠️ Act: ${rec.activity || 'N/A'}\n⏱️ Horas: ${rec.hours}h\n📅 Días: ${rec.span}\n📝 Obs: ${rec.obs || ''}`;
-                
-                cells += `<td colspan="${rec.span}" class="data-cell merged-cell" style="background-color: #f3e8ff; border-right: 1px solid #d8b4fe;" data-tooltip="${tooltip}" onclick="selectCell(this)" ondblclick="openSurvEditor(${emp.id}, ${i})">${rec.obs?'<div class="obs-dot"></div>':''}<div style="font-size:0.8rem; color:#6b21a8;">$${amtNum}</div><div style="font-size:0.6rem; color:#7e22ce; overflow:hidden; white-space:nowrap; padding:0 2px;">${rec.vessel || 'Buque'}</div></td>`;
+                cells += `<td colspan="${rec.span}" class="data-cell merged-cell" style="background-color: #f3e8ff; border-right: 1px solid #d8b4fe;" data-tooltip="${esc(tooltip)}" onclick="cellClick(this, ${emp.id}, ${i}, 'surv')" ondblclick="openSurvEditor(${emp.id}, ${i})">${rec.obs ? '<div class="obs-dot"></div>' : ''}<div class="cell-amt" style="color:#6b21a8;">$${amtNum}</div><div class="cell-sub" style="color:#7e22ce;">${esc(rec.vessel || 'Buque')}</div></td>`;
                 i += (rec.span - 1);
             } else if (rec && rec.linked) {
                 cells += `<td class="data-cell" style="background:#f8fafc;">-</td>`;
             } else {
                 const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
                 mTotal += amt;
-                cells += `<td class="data-cell day-col ${amt>0?'has-data':''}" onclick="selectCell(this)" ondblclick="openSurvEditor(${emp.id}, ${i})">${(rec&&rec.obs)?'<div class="obs-dot"></div>':''}${amt>0?amt:''}</td>`;
+                if (!rec && m.invalid) { cells += `<td class="data-cell day-col day-invalid"></td>`; continue; }
+                cells += `<td class="data-cell day-col ${amt > 0 ? 'has-data' : ''} ${m.weekend ? 'wk-end' : ''}" onclick="cellClick(this, ${emp.id}, ${i}, 'surv')" ondblclick="openSurvEditor(${emp.id}, ${i})">${(rec && rec.obs) ? '<div class="obs-dot"></div>' : ''}${amt > 0 ? amt : ''}</td>`;
             }
         }
-        grandTotal += mTotal;
         if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+        grandTotal += mTotal;
 
         const tr = document.createElement('tr');
         if (emp.status === "Fuera de Servicio") tr.className = 'inactive-row';
-        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem; color:#6b21a8;">${emp.name}</div><div style="font-size:0.65rem; color:#64748b">${emp.role}</div></td>${cells}<td class="total-cell-month center-text" style="color:#6b21a8;">${mTotal}</td>`;
+        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem; color:#6b21a8;">${esc(emp.name)}</div><div style="font-size:0.65rem; color:#64748b">${esc(emp.role)}</div></td>${cells}<td class="total-cell-month center-text" style="color:#6b21a8;">${mTotal}</td>`;
         tbody.appendChild(tr);
     });
     document.getElementById('monthTotalSurv').innerText = grandTotal.toLocaleString();
@@ -1049,58 +1399,40 @@ function renderSurveyorTable(period) {
 function updateSurvHours() {
     const startD = parseInt(document.getElementById('survStartDay').value) || 1;
     const endD = parseInt(document.getElementById('survEndDay').value) || startD;
-    const days = Math.max(1, (endD - startD) + 1);
-    document.getElementById('survHours').value = days * 12; // 12h fijas multiplicadas por días
+    document.getElementById('survHours').value = Math.max(1, (endD - startD) + 1) * 12;
 }
-
-function checkSurvOther(type){
-    const sel = document.getElementById('surv'+type);
-    const inp = document.getElementById('surv'+type+'Other');
-    if(sel.value === 'OTRO') inp.classList.add('visible');
-    else inp.classList.remove('visible');
-}
-
-function getSurvSelectVal(id){
-    const sel = document.getElementById(id);
-    if(sel.value === 'OTRO') return document.getElementById(id+'Other').value.toUpperCase();
-    return sel.value;
-}
-
+function checkSurvOther(type) { const sel = document.getElementById('surv' + type); const inp = document.getElementById('surv' + type + 'Other'); if (sel.value === 'OTRO') inp.classList.add('visible'); else inp.classList.remove('visible'); }
+function getSurvSelectVal(id) { const sel = document.getElementById(id); if (sel.value === 'OTRO') return document.getElementById(id + 'Other').value.toUpperCase(); return sel.value; }
 function closeSurvEditor() { document.getElementById('surveyorEditorModal').classList.remove('open'); }
 
 function openSurvEditor(eid, dix) {
     currentEdit = { empId: eid, dayIdx: dix };
     const p = document.getElementById('monthSelectorSurv').value;
     const emp = appData.employees.find(e => e.id == eid);
+    if (!appData.records[p][eid]) appData.records[p][eid] = Array(31).fill(null);
     const rec = appData.records[p][eid][dix];
-    
+
     document.getElementById('survModalTitle').innerText = `Registro: ${emp.name}`;
-    
-    let start = dix + 1; let end = dix + 1; 
-    let val = rec ? (parseFloat(rec.amount)||'') : 1400; // $1400 por defecto
+    let start = dix + 1; let end = dix + 1;
+    let val = rec ? (parseFloat(rec.amount) || '') : 1400;
     if (rec && rec.span > 1) { end = start + rec.span - 1; }
-    
+
     document.getElementById('survStartDay').value = start;
     document.getElementById('survEndDay').value = end;
+    document.getElementById('survEndDay').max = daysInMonthOf(p);
     document.getElementById('survAmount').value = val;
     document.getElementById('survVessel').value = rec ? (rec.vessel || '') : '';
     document.getElementById('survObs').value = rec ? (rec.obs || '') : '';
-    
-    // Restaurar listas
+
     const muelleOpts = ["Sidor", "Venalum", "Copal", "Fmo", "Bauxilum", "Punta de Piedras", "N/A"];
     const fondeoOpts = ["Milla 44", "Boca de Serpiente", "N/A"];
     const actOpts = ["Draft Survey a buque", "Draft Survey a Gabarra(s)", "Bunker Survey", "Full Condition Survey", "Tecnico a Bordo", "Instalacion de termocuplas"];
-    
     fillSelectOther('survMuelle', muelleOpts, rec ? rec.muelle : '');
     fillSelectOther('survFondeo', fondeoOpts, rec ? rec.fondeo : '');
     fillSelectOther('survActivity', actOpts, rec ? rec.activity : '');
-    
-    // Restaurar horas o calcular nuevas
-    if (rec && rec.hours !== undefined) {
-        document.getElementById('survHours').value = rec.hours;
-    } else {
-        updateSurvHours();
-    }
+
+    if (rec && rec.hours !== undefined) document.getElementById('survHours').value = rec.hours;
+    else updateSurvHours();
 
     document.getElementById('surveyorEditorModal').classList.add('open');
 }
@@ -1111,24 +1443,26 @@ function saveSurveyorEditor() {
     const amount = parseFloat(document.getElementById('survAmount').value);
     const hours = parseFloat(document.getElementById('survHours').value) || 0;
     const p = document.getElementById('monthSelectorSurv').value;
-    
-    if (endD > 31) { alert("⚠️ ERROR: El mes termina el día 31."); return; }
-    if (endD < startD) { alert("⚠️ ERROR: Fecha final menor a inicial."); return; }
+    const dim = daysInMonthOf(p);
 
-    let userRow = appData.records[p][currentEdit.empId];
-    if (!userRow) { userRow = Array(31).fill(null); } 
-    else if (userRow.length < 31) { while (userRow.length < 31) { userRow.push(null); } }
+    if (!endD) { notify("Indica el día final."); return; }
+    if (endD > dim) { notify(`${p} solo tiene ${dim} días.`); return; }
+    if (endD < startD) { notify("Fecha final menor a inicial."); return; }
+
+    const userRow = normalizeRow(appData.records[p][currentEdit.empId]);
     appData.records[p][currentEdit.empId] = userRow;
 
     const oldRec = userRow[currentEdit.dayIdx];
     const oldSpan = oldRec ? (oldRec.span || 1) : 1;
-    for(let d=0; d<oldSpan; d++) { if(currentEdit.dayIdx + d < 31) userRow[currentEdit.dayIdx + d] = null; }
+    if (amount > 0 && hasConflict(userRow, startD - 1, endD - 1, currentEdit.dayIdx, oldSpan)) {
+        if (!confirm("⚠️ En esos días ya existe otro registro para este surveyor.\n\n¿Quieres REEMPLAZARLO?")) return;
+    }
+    for (let d = 0; d < oldSpan; d++) { if (currentEdit.dayIdx + d < 31) userRow[currentEdit.dayIdx + d] = null; }
+    for (let d = startD - 1; d <= endD - 1; d++) clearSpanAt(userRow, d);
 
     const span = endD - startD + 1;
-    for(let d=startD; d<=endD; d++) { userRow[d-1] = null; } 
-    
     if (amount > 0) {
-        const survData = { 
+        const survData = {
             role: "Surveyor",
             vessel: document.getElementById('survVessel').value.toUpperCase(),
             muelle: getSurvSelectVal('survMuelle'),
@@ -1136,184 +1470,217 @@ function saveSurveyorEditor() {
             activity: getSurvSelectVal('survActivity'),
             obs: document.getElementById('survObs').value,
             hours: hours,
-            isPhantom: false 
+            isPhantom: false,
+            ...auditStamp()
         };
-        userRow[startD-1] = { amount: amount, span: span, ...survData };
-        for(let k=1; k < span; k++) { userRow[startD-1+k] = { amount: 0, linked: true, span: 0, ...survData }; }
+        userRow[startD - 1] = { amount: amount, span: span, ...survData };
+        for (let k = 1; k < span; k++) { userRow[startD - 1 + k] = { amount: 0, linked: true, span: 0, ...survData }; }
     }
-    save(); closeSurvEditor(); renderSurveyorTable(p);
+    dbUpdate({ [`records/${p}/${currentEdit.empId}`]: userRow }).then(() => {
+        closeSurvEditor(); renderSurveyorTable(p);
+    });
+}
+function copySurvRecord() {
+    copiedSurvRecordData = {
+        span: parseInt(document.getElementById('survEndDay').value) - parseInt(document.getElementById('survStartDay').value),
+        hours: document.getElementById('survHours').value,
+        amount: document.getElementById('survAmount').value,
+        vessel: document.getElementById('survVessel').value,
+        muelle: document.getElementById('survMuelle').value,
+        muelleOther: document.getElementById('survMuelleOther') ? document.getElementById('survMuelleOther').value : '',
+        fondeo: document.getElementById('survFondeo').value,
+        fondeoOther: document.getElementById('survFondeoOther') ? document.getElementById('survFondeoOther').value : '',
+        activity: document.getElementById('survActivity').value,
+        activityOther: document.getElementById('survActivityOther') ? document.getElementById('survActivityOther').value : '',
+        obs: document.getElementById('survObs').value
+    };
+    showToast("📋 ¡Registro de Surveyor copiado! Abre otra casilla y dale Pegar.");
 }
 
+function pasteSurvRecord() {
+    if (!copiedSurvRecordData) { 
+        notify("No has copiado ningún registro de surveyor todavía."); 
+        return; 
+    }
+    const p = document.getElementById('monthSelectorSurv').value;
+    const startD = parseInt(document.getElementById('survStartDay').value);
+    let newEnd = startD + copiedSurvRecordData.span;
+    const dim = daysInMonthOf(p);
+    if (newEnd > dim) newEnd = dim;
+
+    document.getElementById('survEndDay').value = newEnd;
+    document.getElementById('survHours').value = copiedSurvRecordData.hours || '';
+    document.getElementById('survAmount').value = copiedSurvRecordData.amount;
+    document.getElementById('survVessel').value = copiedSurvRecordData.vessel || '';
+
+    // Muelle
+    document.getElementById('survMuelle').value = copiedSurvRecordData.muelle;
+    const muelleOtherInp = document.getElementById('survMuelleOther');
+    if (muelleOtherInp) {
+        if (copiedSurvRecordData.muelle === 'OTRO') {
+            muelleOtherInp.value = copiedSurvRecordData.muelleOther;
+            muelleOtherInp.classList.add('visible');
+        } else {
+            muelleOtherInp.classList.remove('visible');
+        }
+    }
+
+    // Fondeo
+    document.getElementById('survFondeo').value = copiedSurvRecordData.fondeo;
+    const fondeoOtherInp = document.getElementById('survFondeoOther');
+    if (fondeoOtherInp) {
+        if (copiedSurvRecordData.fondeo === 'OTRO') {
+            fondeoOtherInp.value = copiedSurvRecordData.fondeoOther;
+            fondeoOtherInp.classList.add('visible');
+        } else {
+            fondeoOtherInp.classList.remove('visible');
+        }
+    }
+
+    // Actividad
+    document.getElementById('survActivity').value = copiedSurvRecordData.activity;
+    const actOtherInp = document.getElementById('survActivityOther');
+    if (actOtherInp) {
+        if (copiedSurvRecordData.activity === 'OTRO') {
+            actOtherInp.value = copiedSurvRecordData.activityOther;
+            actOtherInp.classList.add('visible');
+        } else {
+            actOtherInp.classList.remove('visible');
+        }
+    }
+
+    document.getElementById('survObs').value = copiedSurvRecordData.obs || '';
+    showToast("📥 Datos pegados. ¡Verifica el registro y dale Guardar!");
+}
 function deleteSurveyorRecord() {
     if (!confirm("⚠️ ¿Estás seguro de querer BORRAR este registro?")) return;
     const p = document.getElementById('monthSelectorSurv').value;
     const startD = parseInt(document.getElementById('survStartDay').value) - 1;
-    const oldRec = appData.records[p][currentEdit.empId][startD];
-    const oldSpan = oldRec ? (oldRec.span || 1) : 1;
-    for(let i = 0; i < oldSpan; i++) { if(startD + i < 31) { appData.records[p][currentEdit.empId][startD + i] = null; } }
-    save(); closeSurvEditor(); renderSurveyorTable(p);
-    showToast("🗑️ Registro eliminado");
+    const row = normalizeRow(appData.records[p][currentEdit.empId]);
+    appData.records[p][currentEdit.empId] = row;
+    clearSpanAt(row, startD);
+    dbUpdate({ [`records/${p}/${currentEdit.empId}`]: row }, "🗑️ Registro eliminado").then(() => {
+        closeSurvEditor(); renderSurveyorTable(p);
+    });
 }
+
 function exportSurveyorsToExcel() {
     const p = document.getElementById('monthSelectorSurv').value;
-    
-    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
-    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
-    
-    html += '<thead style="background-color: #f3e8ff;"><tr>';
-    html += '<th style="font-weight:bold; width: 200px;">SURVEYOR</th>';
-    for (let i = 1; i <= 31; i++) { html += `<th style="font-weight:bold;">${i}</th>`; }
-    html += '<th style="font-weight:bold;">TOTAL MES</th>';
-    html += '<th style="font-weight:bold;">HORAS MES</th>';
-    html += '</tr></thead><tbody>';
-
-    let rowIndex = 2; 
+    const filter = document.getElementById('searchSurveyor').value.toUpperCase();
+    const header = ['SURVEYOR']; for (let i = 1; i <= 31; i++) header.push(i);
+    header.push('TOTAL MES', 'HORAS MES', 'DETALLE (buque / actividad)');
+    const rows = [header]; const merges = []; const formulas = [];
 
     appData.employees.forEach(emp => {
         if (emp.role !== "Surveyor") return;
-        
-        const filter = document.getElementById('searchSurveyor').value.toUpperCase();
-        if (filter && !emp.name.includes(filter)) return;
-
-        let mTotal = 0; let mHours = 0;
-        let cells = '';
-        const userRecs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
-
+        if (filter && !emp.name.toUpperCase().includes(filter)) return;
+        const recs = (appData.records[p] && appData.records[p][emp.id]) || Array(31).fill(null);
+        const r = rows.length; const line = [emp.name]; const localMerges = []; const detail = [];
+        let mTotal = 0, mHours = 0;
         for (let i = 0; i < 31; i++) {
-            const rec = userRecs[i];
+            const rec = recs[i];
             if (rec && rec.span > 1) {
-                const amtNum = parseFloat(rec.amount) || 0;
-                const hrsNum = parseFloat(rec.hours) || 0;
-                mTotal += amtNum;
-                mHours += hrsNum;
-                
-                const cellText = `$${amtNum} - ${rec.vessel || ''} (${rec.activity || ''})`;
-                cells += `<td colspan="${rec.span}" style="text-align:center; background-color: #f3e8ff;">${cellText}</td>`;
-                i += (rec.span - 1);
+                const a = parseFloat(rec.amount) || 0; mTotal += a; mHours += parseFloat(rec.hours) || 0;
+                const sp = Math.min(rec.span, 31 - i);
+                line.push(a); for (let k = 1; k < sp; k++) line.push(null);
+                localMerges.push({ s: { r, c: 1 + i }, e: { r, c: i + sp } });
+                detail.push(`${i + 1}-${i + sp}: ${rec.vessel || ''} (${rec.activity || ''})`);
+                i += sp - 1;
             } else if (rec && rec.linked) {
-                // Absorbido
+                line.push(null);
             } else {
-                const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
-                const hrs = rec ? (parseFloat(rec.hours) || 0) : 0;
-                mTotal += amt;
-                mHours += hrs;
-                
-                cells += `<td style="text-align:center;" ${amt > 0 ? 'x:num' : ''}>${amt > 0 ? amt : ''}</td>`;
+                const a = rec ? (parseFloat(rec.amount) || 0) : 0, hh = rec ? (parseFloat(rec.hours) || 0) : 0;
+                mTotal += a; mHours += hh;
+                line.push(a > 0 ? a : null);
+                if (a > 0) detail.push(`${i + 1}: ${rec.vessel || ''} (${rec.activity || ''})`);
             }
         }
-
         if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
-
-        html += `<tr>
-            <td><b>${emp.name}</b></td>
-            ${cells}
-            <td style="text-align:center; font-weight:bold; background-color:#f8fafc; color:#6b21a8;" x:num x:fmla="=SUM(B${rowIndex}:AF${rowIndex})">${mTotal}</td>
-            <td style="text-align:center; font-weight:bold;" x:num>${mHours}</td>
-        </tr>`;
-        
-        rowIndex++;
+        line.push(mTotal, mHours, detail.join(' | '));
+        rows.push(line); merges.push(...localMerges);
+        formulas.push({ r, c: 32, f: `SUM(B${r + 1}:AF${r + 1})`, v: mTotal });
     });
-
-    html += '</tbody></table></body></html>';
-
-    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const downloadLink = document.createElement("a");
-    
-    document.body.appendChild(downloadLink);
-    downloadLink.href = url;
-    downloadLink.download = `Surveyors_${p}.xls`;
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
+    saveXlsx(`Surveyors_${p}.xlsx`, 'Surveyors', rows, { merges, formulas, cols: [30, ...Array(31).fill(5), 11, 10, 50] });
 }
-/* =========================================
-   LÓGICA EXCLUSIVA PARA TRANSPORTE
-========================================= */
 
+/* =========================================
+   TRANSPORTE
+========================================= */
 const FLOTA = {
     "Mitsubishi Touring": ["AH288BA"],
-    "Daihatsu Terios": ["FBH01N"], 
-    "Chevrolet Aveo": ["AC549NM"], 
-    "Terios Bego": ["AA455DB"], 
+    "Daihatsu Terios": ["FBH01N"],
+    "Chevrolet Aveo": ["AC549NM"],
+    "Terios Bego": ["AA455DB"],
     "Jeep Cherokee": ["AE693JM"],
     "Hyunday Getz": ["AA550JB"]
 };
 const CHOFERES_BASE = ["Eduardo Marchán", "Jonny Flores", "Julissa Peña", "Diojene Beltran", "Luis Beecker"];
+
 function autoFillPlaca() {
     const v = document.getElementById('transVehiculo').value.trim();
     const p = document.getElementById('transPlaca');
     const dl = document.getElementById('placasList');
-    dl.innerHTML = ''; 
-    if(FLOTA[v]){
-        if(FLOTA[v].length === 1) p.value = FLOTA[v][0]; 
-        else { p.value = ''; FLOTA[v].forEach(pl => { dl.innerHTML += `<option value="${pl}">`; }); }
+    dl.innerHTML = '';
+    if (FLOTA[v]) {
+        if (FLOTA[v].length === 1) p.value = FLOTA[v][0];
+        else { p.value = ''; FLOTA[v].forEach(pl => { dl.innerHTML += `<option value="${esc(pl)}">`; }); }
     }
 }
 
-// NUEVO: Ajusta las fechas "Desde y Hasta" automáticamente si cambias el Mes global
 function updateTransDateRange() {
-    const p = document.getElementById('monthSelectorTrans').value; 
-    if(!p) return;
-    const [mesStr, year] = p.split(' ');
-    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-    const monthIdx = meses.indexOf(mesStr);
-    
-    if(monthIdx >= 0) {
-        const firstDay = new Date(year, monthIdx, 1);
-        const lastDay = new Date(year, monthIdx + 1, 0);
-        document.getElementById('transDateFrom').value = firstDay.toISOString().split('T')[0];
-        document.getElementById('transDateTo').value = lastDay.toISOString().split('T')[0];
+    const p = document.getElementById('monthSelectorTrans').value;
+    if (!p) return;
+    const { mi, year } = parsePeriod(p);
+    if (mi >= 0 && !isNaN(year)) {
+        document.getElementById('transDateFrom').value = localISO(new Date(year, mi, 1));
+        document.getElementById('transDateTo').value = localISO(new Date(year, mi + 1, 0));
+        transRangeMonth = p;
         renderTransportTable();
     }
 }
 
-// NUEVO: Extrae todos los viajes de la base de datos sin importar el mes
 function getAllTransportRecords() {
-    let todos = [];
-    if(!appData.transporte) return todos;
+    const todos = [];
+    if (!appData.transporte) return todos;
     Object.keys(appData.transporte).forEach(mesKey => {
-        appData.transporte[mesKey].forEach((viaje, idx) => {
-            todos.push({ ...viaje, mesOriginal: mesKey, idOriginal: idx });
-        });
+        const arr = appData.transporte[mesKey];
+        if (!Array.isArray(arr)) return;
+        arr.forEach((viaje, idx) => { if (viaje) todos.push({ ...viaje, mesOriginal: mesKey, idOriginal: idx }); });
     });
-    // Ordenar por fecha cronológicamente
-    return todos.sort((a, b) => new Date(a.fecha_raw) - new Date(b.fecha_raw));
+    return todos.sort((a, b) => ((a.fecha_raw || '') + (a.hora_raw || '')).localeCompare((b.fecha_raw || '') + (b.hora_raw || '')));
+}
+
+function filteredTransport() {
+    const filter = document.getElementById('searchTransport').value.toUpperCase();
+    const fromDate = document.getElementById('transDateFrom').value;
+    const toDate = document.getElementById('transDateTo').value;
+    return getAllTransportRecords().filter(v => {
+        if (fromDate && (v.fecha_raw || '') < fromDate) return false;
+        if (toDate && (v.fecha_raw || '') > toDate) return false;
+        const matchText = `${v.chofer} ${v.placa} ${v.vehiculo} ${v.detalles}`.toUpperCase();
+        return !filter || matchText.includes(filter);
+    });
 }
 
 function renderTransportTable() {
     const tbody = document.getElementById('tableBodyTrans');
-    if(!tbody) return;
+    if (!tbody) return;
     tbody.innerHTML = '';
-    
-    const filter = document.getElementById('searchTransport').value.toUpperCase();
-    const fromDate = document.getElementById('transDateFrom').value;
-    const toDate = document.getElementById('transDateTo').value;
     let total = 0;
-
-    const viajesFiltrados = getAllTransportRecords().filter(v => {
-        if (fromDate && v.fecha_raw < fromDate) return false;
-        if (toDate && v.fecha_raw > toDate) return false;
-        const matchText = `${v.chofer} ${v.placa} ${v.vehiculo} ${v.detalles}`.toUpperCase();
-        if (filter && !matchText.includes(filter)) return false;
-        return true;
-    });
-
-    viajesFiltrados.forEach(viaje => {
+    filteredTransport().forEach(viaje => {
         total += parseFloat(viaje.monto) || 0;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="text-align:center;">${viaje.fecha}</td>
-            <td style="text-align:center;">${viaje.hora}</td>
-            <td>${viaje.chofer}</td>
-            <td style="text-align:center; font-weight:bold;">${viaje.placa}</td>
-            <td>${viaje.vehiculo}</td>
-            <td>${viaje.detalles}</td>
-            <td style="text-align:center; font-weight:bold; color: #16a34a;">$${viaje.monto}</td>
+            <td style="text-align:center;">${esc(viaje.fecha)}</td>
+            <td style="text-align:center;">${esc(viaje.hora)}</td>
+            <td>${esc(viaje.chofer)}</td>
+            <td style="text-align:center; font-weight:bold;">${esc(viaje.placa)}</td>
+            <td>${esc(viaje.vehiculo)}</td>
+            <td>${esc(viaje.detalles)}</td>
+            <td style="text-align:center; font-weight:bold; color: #16a34a;">$${esc(viaje.monto)}</td>
             <td style="text-align:center;">
-                <button class="compact-btn" style="background:#f59e0b;" onclick="openTransportEditor('${viaje.mesOriginal}', ${viaje.idOriginal})">✏️ Editar</button>
-            </td>
-        `;
+                <button class="compact-btn" style="background:#f59e0b;" onclick="openTransportEditor('${esc(viaje.mesOriginal)}', ${viaje.idOriginal})">✏️ Editar</button>
+            </td>`;
         tbody.appendChild(tr);
     });
     document.getElementById('monthTotalTrans').innerText = total.toLocaleString();
@@ -1322,17 +1689,17 @@ function renderTransportTable() {
 function openTransportEditor(mesOriginal = null, idx = -1) {
     document.getElementById('transEditIndex').value = idx;
     document.getElementById('transEditMonth').value = mesOriginal || '';
-    
+
     const dChofer = document.getElementById('choferesList');
     const dVehiculo = document.getElementById('vehiculosList');
     dChofer.innerHTML = ''; dVehiculo.innerHTML = '';
-    Object.keys(FLOTA).forEach(v => dVehiculo.innerHTML += `<option value="${v}">`);
-    
-    let choferesUnicos = new Set(CHOFERES_BASE);
-    getAllTransportRecords().forEach(v => choferesUnicos.add(v.chofer));
-    choferesUnicos.forEach(c => dChofer.innerHTML += `<option value="${c}">`);
+    Object.keys(FLOTA).forEach(v => dVehiculo.innerHTML += `<option value="${esc(v)}">`);
 
-    if (idx >= 0 && mesOriginal) {
+    const choferesUnicos = new Set(CHOFERES_BASE);
+    getAllTransportRecords().forEach(v => { if (v.chofer) choferesUnicos.add(v.chofer); });
+    choferesUnicos.forEach(c => dChofer.innerHTML += `<option value="${esc(c)}">`);
+
+    if (idx >= 0 && mesOriginal && appData.transporte && appData.transporte[mesOriginal] && appData.transporte[mesOriginal][idx]) {
         document.getElementById('transModalTitle').innerText = "Editar Viaje";
         document.getElementById('btnDeleteTrans').style.display = 'inline-block';
         const v = appData.transporte[mesOriginal][idx];
@@ -1344,14 +1711,16 @@ function openTransportEditor(mesOriginal = null, idx = -1) {
         document.getElementById('transDetalles').value = v.detalles;
         document.getElementById('transMonto').value = v.monto;
     } else {
+        document.getElementById('transEditIndex').value = -1;
+        document.getElementById('transEditMonth').value = '';
         document.getElementById('transModalTitle').innerText = "Nuevo Viaje";
         document.getElementById('btnDeleteTrans').style.display = 'none';
         document.getElementById('transChofer').value = '';
         document.getElementById('transVehiculo').value = '';
         document.getElementById('transPlaca').value = '';
         const today = new Date();
-        document.getElementById('transFecha').value = today.toISOString().split('T')[0];
-        document.getElementById('transHora').value = today.toTimeString().slice(0,5);
+        document.getElementById('transFecha').value = localISO(today);
+        document.getElementById('transHora').value = localHM(today);
         document.getElementById('transDetalles').value = '';
         document.getElementById('transMonto').value = '';
     }
@@ -1360,16 +1729,14 @@ function openTransportEditor(mesOriginal = null, idx = -1) {
 
 function closeTransportEditor() { document.getElementById('transportEditorModal').classList.remove('open'); }
 
-// NUEVO: Identifica a qué mes pertenece la fecha seleccionada para guardar el registro donde debe ir
 function getPeriodBucket(dateStr) {
-    const [year, month, day] = dateStr.split('-');
-    const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-    return `${meses[parseInt(month)-1]} ${year}`;
+    const [year, month] = dateStr.split('-');
+    return `${MESES_CAP[parseInt(month) - 1]} ${year}`;
 }
 
 function saveTransportRecord() {
     const f_raw = document.getElementById('transFecha').value;
-    if(!f_raw) { alert("⚠️ Debe indicar la fecha."); return; }
+    if (!f_raw) { notify("Debe indicar la fecha."); return; }
 
     const bucketPeriod = getPeriodBucket(f_raw);
     if (!appData.transporte) appData.transporte = {};
@@ -1378,15 +1745,15 @@ function saveTransportRecord() {
     const idx = parseInt(document.getElementById('transEditIndex').value);
     const originalMonth = document.getElementById('transEditMonth').value;
     const h_raw = document.getElementById('transHora').value;
-    
+
     const [year, month, day] = f_raw.split('-');
     const fechaFmt = `${day}/${month}/${year}`;
     let horaFmt = h_raw;
     if (h_raw) {
-        let [hh, mm] = h_raw.split(':');
-        let h = parseInt(hh); let ampm = h >= 12 ? 'PM' : 'AM';
+        const [hh, mm] = h_raw.split(':');
+        let h = parseInt(hh); const ampm = h >= 12 ? 'PM' : 'AM';
         h = h % 12; if (h === 0) h = 12;
-        horaFmt = `${h.toString().padStart(2, '0')}:${mm}${ampm}`;
+        horaFmt = `${pad2(h)}:${mm}${ampm}`;
     }
 
     const viaje = {
@@ -1396,171 +1763,165 @@ function saveTransportRecord() {
         fecha: fechaFmt, fecha_raw: f_raw,
         hora: horaFmt, hora_raw: h_raw,
         detalles: document.getElementById('transDetalles').value.trim(),
-        monto: parseFloat(document.getElementById('transMonto').value) || 0
+        monto: parseFloat(document.getElementById('transMonto').value) || 0,
+        ...auditStamp()
     };
 
-    if (idx >= 0 && originalMonth) {
+    let multipath = {};
+    if (idx >= 0 && originalMonth && appData.transporte[originalMonth]) {
         if (originalMonth === bucketPeriod) {
-            appData.transporte[bucketPeriod][idx] = viaje; // Se quedó en el mismo mes
+            appData.transporte[bucketPeriod][idx] = viaje;
         } else {
-            appData.transporte[originalMonth].splice(idx, 1); // Lo borra del mes viejo
-            appData.transporte[bucketPeriod].push(viaje); // Lo mueve al mes nuevo
+            appData.transporte[originalMonth].splice(idx, 1);
+            appData.transporte[bucketPeriod].push(viaje);
+            multipath[`transporte/${originalMonth}`] = appData.transporte[originalMonth];
         }
     } else {
         appData.transporte[bucketPeriod].push(viaje);
     }
-
-    save(); closeTransportEditor(); renderTransportTable();
+    
+    multipath[`transporte/${bucketPeriod}`] = appData.transporte[bucketPeriod];
+    dbUpdate(multipath).then(() => { closeTransportEditor(); renderTransportTable(); });
 }
 
 function deleteTransportRecord() {
-    if(!confirm("⚠️ ¿Eliminar este viaje?")) return;
+    if (!confirm("⚠️ ¿Eliminar este viaje?")) return;
     const idx = parseInt(document.getElementById('transEditIndex').value);
     const originalMonth = document.getElementById('transEditMonth').value;
-    appData.transporte[originalMonth].splice(idx, 1);
-    save(); closeTransportEditor(); renderTransportTable();
+    if (appData.transporte && appData.transporte[originalMonth]) {
+        appData.transporte[originalMonth].splice(idx, 1);
+        dbUpdate({ [`transporte/${originalMonth}`]: appData.transporte[originalMonth] }).then(() => {
+            closeTransportEditor(); renderTransportTable();
+        });
+    }
 }
 
 function exportTransportToExcel() {
     const fromDate = document.getElementById('transDateFrom').value;
     const toDate = document.getElementById('transDateTo').value;
-    
-    // Filtramos exactamente los viajes que están en la tabla actualmente
-    const viajesFiltrados = getAllTransportRecords().filter(v => {
-        if (fromDate && v.fecha_raw < fromDate) return false;
-        if (toDate && v.fecha_raw > toDate) return false;
-        return true;
+    const viajes = filteredTransport();
+    const rows = [['VEHICULO', 'PLACA', 'CHOFER', 'OPERACION', 'FECHA', 'HORA', 'DETALLES DEL SERVICIO', 'MONTO']];
+    let mTotal = 0;
+    viajes.forEach(v => {
+        const amt = parseFloat(v.monto) || 0; mTotal += amt;
+        rows.push([v.vehiculo, v.placa, v.chofer, 'Transporte', v.fecha, v.hora, v.detalles, amt]);
     });
-    
-    let html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>';
-    html += '<table border="1" style="font-family: Arial, sans-serif; font-size: 11px;">';
-    html += '<thead style="background-color: #f1f5f9;"><tr>';
-    html += '<th style="font-weight:bold;">VEHICULO</th><th style="font-weight:bold;">PLACA</th>';
-    html += '<th style="font-weight:bold;">CHOFER</th><th style="font-weight:bold;">OPERACION</th>';
-    html += '<th style="font-weight:bold;">FECHA</th><th style="font-weight:bold;">HORA</th>';
-    html += '<th style="font-weight:bold; width: 300px;">DETALLES DEL SERVICIO</th><th style="font-weight:bold;">MONTO</th>';
-    html += '</tr></thead><tbody>';
-
-    let mTotal = 0; let rowIndex = 2;
-    viajesFiltrados.forEach(v => {
-        const amt = parseFloat(v.monto) || 0;
-        mTotal += amt;
-        html += `<tr>
-            <td>${v.vehiculo}</td><td>${v.placa}</td><td>${v.chofer}</td><td>Transporte</td>
-            <td style="text-align:center;">${v.fecha}</td><td style="text-align:center;">${v.hora}</td>
-            <td>${v.detalles}</td><td style="text-align:center;" x:num>${amt}</td>
-        </tr>`;
-        rowIndex++;
-    });
-
-    html += `<tr><td colspan="7" style="text-align:right; font-weight:bold;">TOTAL</td><td style="font-weight:bold; background-color:#f1f5f9;" x:num x:fmla="=SUM(H2:H${rowIndex-1})">${mTotal}</td></tr>`;
-    html += '</tbody></table></body></html>';
-
-    const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    document.body.appendChild(link);
-    // Cambiamos el nombre para indicar que puede ser una semana cruzada
-    const nombreExcel = `Transporte_${fromDate}_al_${toDate}.xls`;
-    link.href = url; link.download = nombreExcel;
-    link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
-}
-async function downloadData(){const str=JSON.stringify(appData);try{const handle=await window.showSaveFilePicker({suggestedName:'icg_backup.json',types:[{description:'JSON File',accept:{'application/json':['.json']}}]});const writable=await handle.createWritable();await writable.write(str);await writable.close();}catch(err){if(err.name!=='AbortError'){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(str);a.download="icg_backup_v1.0.json";document.body.appendChild(a);a.click();a.remove();}}setDirty(false);}
-
-function changeDistance(id, newDist){
-    const emp = appData.employees.find(e => e.id == id);
-    if(emp){
-        emp.distanceScore = parseInt(newDist) || 5;
-        save();
-        renderSuggestions(); // Recalcula las sugerencias si cambias a alguien
-    }
+    const totalRow = rows.length;
+    rows.push([null, null, null, null, null, null, 'TOTAL', mTotal]);
+    const formulas = viajes.length ? [{ r: totalRow, c: 7, f: `SUM(H2:H${totalRow})`, v: mTotal }] : [];
+    saveXlsx(`Transporte_${fromDate || 'inicio'}_al_${toDate || 'fin'}.xlsx`, 'Transporte', rows, { formulas, cols: [20, 12, 20, 14, 12, 10, 50, 10] });
 }
 
-function loadBackup(input){
-    const reader=new FileReader();
-    reader.onload=e=>{
-        let raw=e.target.result;
-        if(raw.charCodeAt(0)===0xFEFF){raw=raw.slice(1);}
-        try {
-            const parsed=JSON.parse(raw);
-            loadParsedData(parsed, false);
-            save(); 
-            alert("✅ Archivo cargado correctamente y sincronizado con la Nube.");
-        } catch(x) {
-            console.error(x); alert("❌ Error: "+x.message);
+/* =========================================
+   RESPALDOS
+========================================= */
+async function downloadData() {
+    const str = JSON.stringify(appData);
+    try {
+        const handle = await window.showSaveFilePicker({ suggestedName: 'icg_backup.json', types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }] });
+        const writable = await handle.createWritable(); await writable.write(str); await writable.close();
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(str);
+            a.download = "icg_backup_v1.0.json"; document.body.appendChild(a); a.click(); a.remove();
         }
-    };
-    reader.readAsText(input.files[0]);
+    }
+    setDirty(false);
 }
 
-function inspectData(){if(!appData.records){alert("No hay datos cargados.");return;}let msg="📅 PERIODOS ENCONTRADOS EN LA NUBE:\n\n";Object.keys(appData.records).forEach(k=>{const count=Object.values(appData.records[k]).reduce((acc,curr)=>acc+(curr?curr.filter(x=>x&&(parseFloat(x.amount)>0)).length:0),0);msg+=`• ${k}: ${count} registros\n`;});alert(msg);}
-function openBaseModal(){const container=document.getElementById('baseList');container.innerHTML='';appData.employees.forEach(emp=>{const hist=appData.historical2025[emp.id]||{year:0};const row=document.createElement('div');row.style.display='flex';row.style.justifyContent='space-between';row.style.alignItems='center';row.innerHTML=`<span style="font-size:0.85rem; font-weight:bold;">${emp.name}</span><input type="number" id="base_year_${emp.id}" value="${hist.year}" class="compact-input" style="width:100px; text-align:right;">`;container.appendChild(row);});document.getElementById('baseModal').classList.add('open');}
-function saveBases(){appData.employees.forEach(emp=>{const val=parseFloat(document.getElementById(`base_year_${emp.id}`).value)||0;if(!appData.historical2025[emp.id])appData.historical2025[emp.id]={month:0,year:0};appData.historical2025[emp.id].year=val;});save();document.getElementById('baseModal').classList.remove('open');renderAnalytics();}
+function autoBackupDownload() {
+    try {
+        const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `icg_respaldo_previo_${localISO(new Date())}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { console.error(e); }
+}
 
-/* --- LÓGICA DE REGISTRO RÁPIDO Y TABULADORES --- */
-const TABULADORES = {
-    "Sidor": {
-        "Buques/Gabarras": [
-            { min: 0, max: 6000, roles: {"Supervisor": 50, "Tecnico de Seguridad": 50, "Inspector": 30} },
-            { min: 6001, max: 9000, roles: {"Supervisor": 100, "Tecnico de Seguridad": 100, "Inspector": 60} },
-            { min: 9001, max: 12000, roles: {"Supervisor": 150, "Tecnico de Seguridad": 150, "Inspector": 100} },
-            { min: 12001, max: 15000, roles: {"Supervisor": 190, "Tecnico de Seguridad": 190, "Inspector": 130} },
-            { min: 15001, max: 20000, roles: {"Supervisor": 260, "Tecnico de Seguridad": 260, "Inspector": 180} },
-            { min: 20001, max: 30000, roles: {"Supervisor": 390, "Tecnico de Seguridad": 390, "Inspector": 270} },
-            { min: 30001, max: 40000, roles: {"Supervisor": 520, "Tecnico de Seguridad": 520, "Inspector": 360} },
-            { min: 40001, max: 45000, roles: {"Supervisor": 580, "Tecnico de Seguridad": 580, "Inspector": 400} },
-            { min: 45001, max: 50000, roles: {"Supervisor": 650, "Tecnico de Seguridad": 650, "Inspector": 450} },
-            { min: 50001, max: 51000, roles: {"Supervisor": 660, "Tecnico de Seguridad": 660, "Inspector": 460} },
-            { min: 51001, max: 52000, roles: {"Supervisor": 676, "Tecnico de Seguridad": 676, "Inspector": 470} },
-            { min: 52001, max: 53000, roles: {"Supervisor": 689, "Tecnico de Seguridad": 689, "Inspector": 480} },
-            { min: 53001, max: 54000, roles: {"Supervisor": 700, "Tecnico de Seguridad": 700, "Inspector": 490} },
-            { min: 54001, max: 55000, roles: {"Supervisor": 715, "Tecnico de Seguridad": 715, "Inspector": 500} }, 
-        ]
-    },
-    "Copal":{
-        "Buques/Gabarras": [
-            { min: 0, max: 6000, roles: {"Inspector": 30} },
-            { min: 6001, max: 12000, roles: {"Inspector": 80} },
-            { min: 12001, max: 20000, roles: {"Inspector": 120} },
-            { min: 20001, max: 30000, roles: {"Inspector": 150} },
-        ]
-    },
-    "Fmo": { // Ajustado a "Fmo" para coincidir con tu BD
-        "Buques/Gabarras": [
-            { min: 0, max: 6000, roles: {"Inspector": 30} },
-            { min: 6001, max: 12000, roles: {"Inspector": 80} },
-            { min: 12001, max: 20000, roles: {"Inspector": 120} },
-            { min: 20001, max: 30000, roles: {"Inspector": 150} },
-        ]
-    },
-    "Bauxilum": {
-        "Buques/Gabarras": [
-            { min: 0, max: 6000, roles: {"Inspector": 30} },
-            { min: 6001, max: 9000, roles: {"Inspector": 60} },
-            { min: 9001, max: 12000, roles: {"Inspector": 100} },
-            { min: 12001, max: 15000, roles: {"Inspector": 130} },
-            { min: 15001, max: 20000, roles: {"Inspector": 180} },
-            { min: 20001, max: 30000, roles: {"Inspector": 270} },
-            { min: 30001, max: 40000, roles: {"Inspector": 360} },
-            { min: 40001, max: 45000, roles: {"Inspector": 400} },
-            { min: 45001, max: 50000, roles: {"Inspector": 450} },
-            { min: 50001, max: 51000, roles: {"Inspector": 460} },
-            { min: 51001, max: 52000, roles: {"Inspector": 470} },
-            { min: 52001, max: 53000, roles: {"Inspector": 480} },
-            { min: 53001, max: 54000, roles: {"Inspector": 490} },
-            { min: 54001, max: 55000, roles: {"Inspector": 500} },
-        ]
+function changeDistance(id, newDist) {
+    const emp = appData.employees.find(e => e.id == id);
+    if (emp) {
+        emp.distanceScore = Math.min(10, Math.max(1, parseInt(newDist) || 5));
+        dbUpdate({ 'employees': appData.employees }).then(renderSuggestions);
     }
-};
+}
+
+function validateBackup(p) {
+    if (!p || typeof p !== 'object') return 'El archivo no es un JSON de respaldo válido.';
+    if (!p.employees || (Array.isArray(p.employees) && p.employees.length === 0)) return 'No contiene la lista de empleados.';
+    if (!p.records || typeof p.records !== 'object') return 'No contiene los registros (records).';
+    return null;
+}
+
+function loadBackup(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        let raw = e.target.result;
+        if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+        try {
+            const parsed = JSON.parse(raw);
+            const problem = validateBackup(parsed);
+            if (problem) { alert("❌ Respaldo rechazado: " + problem); return; }
+            const nEmp = Array.isArray(parsed.employees) ? parsed.employees.length : Object.keys(parsed.employees).length;
+            const nPer = Object.keys(parsed.records).length;
+            if (!confirm(`⚠️ Vas a REEMPLAZAR TODOS los datos de la nube por este archivo:\n\n• ${nEmp} empleados\n• ${nPer} periodos con registros\n\nSe descargará automáticamente una copia de los datos actuales antes de continuar.\n\n¿Continuar?`)) return;
+            if (dataLoaded) autoBackupDownload();
+            loadParsedData(parsed, false);
+            dataLoaded = true;
+            database.ref('icg_master_data').set(JSON.parse(JSON.stringify(appData)))
+                .then(() => showToast("✅ Respaldo cargado y sincronizado"));
+        } catch (x) {
+            console.error(x); alert("❌ Error: " + x.message);
+        } finally { input.value = ''; }
+    };
+    reader.readAsText(file);
+}
+
+function inspectData() {
+    if (!appData.records) { alert("No hay datos cargados."); return; }
+    let msg = "📅 PERIODOS ENCONTRADOS EN LA NUBE:\n\n";
+    Object.keys(appData.records).sort((a, b) => periodKey(a) - periodKey(b)).forEach(k => {
+        const count = Object.values(appData.records[k]).reduce((acc, curr) => acc + (curr ? curr.filter(x => x && (parseFloat(x.amount) > 0)).length : 0), 0);
+        msg += `• ${k}: ${count} registros\n`;
+    });
+    alert(msg);
+}
+
+function openBaseModal() {
+    const container = document.getElementById('baseList'); container.innerHTML = '';
+    appData.employees.forEach(emp => {
+        const hist = appData.historical2025[emp.id] || { year: 0 };
+        const row = document.createElement('div');
+        row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center';
+        row.innerHTML = `<span style="font-size:0.85rem; font-weight:bold;">${esc(emp.name)}</span><input type="number" id="base_year_${emp.id}" value="${hist.year}" class="compact-input" style="width:100px; text-align:right;">`;
+        container.appendChild(row);
+    });
+    document.getElementById('baseModal').classList.add('open');
+}
+
+function saveBases() {
+    appData.employees.forEach(emp => {
+        const val = parseFloat(document.getElementById(`base_year_${emp.id}`).value) || 0;
+        if (!appData.historical2025[emp.id]) appData.historical2025[emp.id] = { month: 0, year: 0 };
+        appData.historical2025[emp.id].year = val;
+    });
+    dbUpdate({ 'historical2025': appData.historical2025 }).then(() => {
+        document.getElementById('baseModal').classList.remove('open'); renderAnalytics();
+    });
+}
+
+/* =========================================
+   REGISTRO RÁPIDO Y TABULADORES
+========================================= */
 
 let quickRows = [];
 
-// NUEVA FUNCIÓN: Muestra u oculta el input manual en el Registro Rápido
-function checkQrOther(type){
+function checkQrOther(type) {
     const sel = document.getElementById('qr' + type);
     const inp = document.getElementById('qr' + type + 'Other');
-    if(sel.value === 'OTRO') inp.classList.add('visible');
-    else inp.classList.remove('visible');
+    if (sel.value === 'OTRO') inp.classList.add('visible'); else inp.classList.remove('visible');
 }
 
 function initQuickEntry() {
@@ -1568,108 +1929,68 @@ function initQuickEntry() {
     selPeriod.innerHTML = document.getElementById('monthSelector').innerHTML;
     selPeriod.value = document.getElementById('monthSelector').value;
     fillSelect('qrSite', appData.sites, appData.sites[0]);
-    
-    // CAMBIO AQUÍ: Usamos fillSelectOther en lugar de fillSelect
     fillSelectOther('qrActivity', appData.activities, appData.activities[0]);
-    
-    if(quickRows.length === 0) addQuickRow(); 
-    else renderQuickRows();
+    if (quickRows.length === 0) addQuickRow(); else renderQuickRows();
 }
 
-function addQuickRow() {
-    quickRows.push({ empId: '', role: 'Inspector', shift: 'Diurno', amount: '', isAuto: false });
-    renderQuickRows();
-}
+function addQuickRow() { quickRows.push({ empId: '', role: 'Inspector', shift: 'Diurno', amount: '', isAuto: false }); renderQuickRows(); }
+function removeQuickRow(index) { quickRows.splice(index, 1); renderQuickRows(); }
 
-function removeQuickRow(index) {
-    quickRows.splice(index, 1);
-    renderQuickRows();
-}
-
-// 🧠 MOTOR DE CÁLCULO
 function getTabuladorPrice(site, activity, tons, role) {
     if (!tons || tons <= 0) return null;
-    const siteUpper = site.toUpperCase();
-    const actUpper = activity.toUpperCase();
-    
-    // Clasificar actividad
+    const siteUpper = String(site).toUpperCase();
+    const actUpper = String(activity).toUpperCase();
+
     let tabAct = null;
     if (actUpper.includes("BUQUE") || actUpper.includes("GABARRA")) tabAct = "Buques/Gabarras";
-    else return null; 
+    else return null;
 
-    // Buscar si la zona tiene tabulador
-    const siteKey = Object.keys(TABULADORES).find(k => k.toUpperCase() === siteUpper);
-    if (!siteKey || !TABULADORES[siteKey][tabAct]) return null;
+    const siteKey = Object.keys(appData.tabuladores).find(k => k.toUpperCase() === siteUpper);
+    if (!siteKey || !appData.tabuladores[siteKey][tabAct]) return null;
 
-    const ranges = TABULADORES[siteKey][tabAct];
-    let selectedTier = null;
-    
-    // Buscar el rango de toneladas
-    for (let i = 0; i < ranges.length; i++) {
-        if (tons >= ranges[i].min && tons <= ranges[i].max) { selectedTier = ranges[i]; break; }
-    }
-    // Desbordamiento: Si es mayor al máximo estipulado, tomar el más alto
-    if (!selectedTier && tons > ranges[ranges.length - 1].max) { selectedTier = ranges[ranges.length - 1]; }
-    if (!selectedTier) return null;
+    const ranges = appData.tabuladores[siteKey][tabAct];
+    let selectedTier = ranges.find(r => tons <= r.max);
+    if (!selectedTier) selectedTier = ranges[ranges.length - 1]; 
 
-    // Regla de aplanamiento de roles (Solo Sidor distingue, el resto paga a precio de Inspector)
     let roleToLookUp = role;
     if (siteKey !== "Sidor") roleToLookUp = "Inspector";
 
     let price = selectedTier.roles[roleToLookUp];
-    if (price === undefined) price = selectedTier.roles["Inspector"]; // Red de seguridad
-
+    if (price === undefined) price = selectedTier.roles["Inspector"];
     return price;
 }
 
-// 🔄 ACTUALIZA TODA LA LISTA AL CAMBIAR SITIO, ACTIVIDAD O TONELADAS
 function recalculateAllQuickRows() {
     const site = document.getElementById('qrSite').value;
     const act = getSelectVal('qrActivity');
     const tons = parseFloat(document.getElementById('qrTons').value) || 0;
-    
+
     let updatedAny = false;
     quickRows.forEach(row => {
-        if(!row.empId) return;
+        if (!row.empId) return;
         const autoPrice = getTabuladorPrice(site, act, tons, row.role);
-        if (autoPrice !== null) {
-            row.amount = autoPrice;
-            row.isAuto = true;
-            updatedAny = true;
-        } else {
-            row.isAuto = false; // Se apaga la luz verde, mantiene el número que tenga
-        }
+        if (autoPrice !== null) { row.amount = autoPrice; row.isAuto = true; updatedAny = true; }
+        else row.isAuto = false;
     });
-
     renderQuickRows();
-    if(updatedAny) showToast("💡 Tarifas aplicadas según tabulador");
+    if (updatedAny) showToast("💡 Tarifas aplicadas según tabulador");
 }
 
 function updateQuickRow(index, field, value) {
     quickRows[index][field] = value;
-    
-    // Si edita el monto manualmente, quitamos la marca verde de auto-cálculo
-    if(field === 'amount') quickRows[index].isAuto = false;
-
-    // Autocompletar el rol si cambia de empleado
-    if(field === 'empId') {
+    if (field === 'amount') quickRows[index].isAuto = false;
+    if (field === 'empId') {
         const emp = appData.employees.find(e => e.id == value);
-        if(emp) quickRows[index].role = emp.role;
+        if (emp) quickRows[index].role = emp.role;
     }
-
-    // Si cambia empleado o cargo, recalculamos su precio individualmente
-    if(field === 'empId' || field === 'role') {
+    if (field === 'empId' || field === 'role') {
         const site = document.getElementById('qrSite').value;
         const act = getSelectVal('qrActivity');
         const tons = parseFloat(document.getElementById('qrTons').value) || 0;
         const autoPrice = getTabuladorPrice(site, act, tons, quickRows[index].role);
-        if (autoPrice !== null) {
-            quickRows[index].amount = autoPrice;
-            quickRows[index].isAuto = true;
-        }
+        if (autoPrice !== null) { quickRows[index].amount = autoPrice; quickRows[index].isAuto = true; }
     }
-    
-    renderQuickRows(); 
+    renderQuickRows();
 }
 
 function renderQuickRows() {
@@ -1678,31 +1999,25 @@ function renderQuickRows() {
         container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">No hay personal. Haz clic en "+ Agregar Persona".</div>';
         return;
     }
-
     let html = '';
     quickRows.forEach((row, i) => {
         const autoClass = row.isAuto ? 'auto-calc' : '';
         const autoTitle = row.isAuto ? 'Calculado por Tabulador' : 'Monto manual';
-
         html += `
         <div class="qr-row">
             <select class="form-control qr-emp-select" onchange="updateQuickRow(${i}, 'empId', this.value)">
                 <option value="">-- Seleccionar Empleado --</option>
-                ${appData.employees.filter(e => e.status !== 'Fuera de Servicio' || e.id == row.empId).map(e => `<option value="${e.id}" ${e.id == row.empId ? 'selected' : ''}>${e.name}</option>`).join('')}
+                ${appData.employees.filter(e => e.status !== 'Fuera de Servicio' || e.id == row.empId).map(e => `<option value="${e.id}" ${e.id == row.empId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}
             </select>
-            
             <select class="form-control qr-role-select" onchange="updateQuickRow(${i}, 'role', this.value)">
-                ${ROLES.map(r => `<option value="${r}" ${r == row.role ? 'selected' : ''}>${r}</option>`).join('')}
+                ${ROLES.map(r => `<option value="${esc(r)}" ${r == row.role ? 'selected' : ''}>${esc(r)}</option>`).join('')}
             </select>
-            
             <select class="form-control qr-shift-select" onchange="updateQuickRow(${i}, 'shift', this.value)">
                 <option value="Diurno" ${row.shift == 'Diurno' ? 'selected' : ''}>☀️ Diurno (D)</option>
                 <option value="Nocturno" ${row.shift == 'Nocturno' ? 'selected' : ''}>🌙 Nocturno (N)</option>
                 <option value="Mixto" ${row.shift == 'Mixto' ? 'selected' : ''}>⚖️ Mixto (M)</option>
             </select>
-            
             <input type="number" class="form-control qr-amount-input ${autoClass}" placeholder="Monto ($)" value="${row.amount}" title="${autoTitle}" onchange="updateQuickRow(${i}, 'amount', parseFloat(this.value) || 0)">
-            
             <button class="qr-delete" onclick="removeQuickRow(${i})" title="Quitar fila">✕</button>
         </div>`;
     });
@@ -1716,44 +2031,55 @@ function saveQuickOperation() {
     const site = document.getElementById('qrSite').value;
     const act = getSelectVal('qrActivity');
     const obs = document.getElementById('qrObs').value.toUpperCase();
-    const tons = document.getElementById('qrTons').value; // Solo para añadirlo a la nota
+    const tons = parseFloat(document.getElementById('qrTons').value) || 0;
+    const dim = daysInMonthOf(p);
 
-    if(!startD || !endD || startD > endD || startD < 1 || endD > 31) { alert("⚠️ Verifica los días de inicio y fin (Del 1 al 31)."); return; }
-    if(quickRows.length === 0) { alert("⚠️ Debes agregar al menos a una persona a la lista."); return; }
-    let validEmps = true; quickRows.forEach(r => { if(!r.empId) validEmps = false; });
-    if(!validEmps) { alert("⚠️ Hay filas sin empleado seleccionado. Verifica la lista."); return; }
+    if (!p) { notify("Selecciona el periodo de nómina."); return; }
+    if (!startD || !endD || startD > endD || startD < 1) { notify("Verifica los días de inicio y fin."); return; }
+    if (endD > dim) { notify(`${p} solo tiene ${dim} días.`); return; }
+    if (quickRows.length === 0) { notify("Debes agregar al menos a una persona a la lista."); return; }
+    if (quickRows.some(r => !r.empId)) { notify("Hay filas sin empleado seleccionado. Verifica la lista."); return; }
+    if (new Set(quickRows.map(r => String(r.empId))).size !== quickRows.length) { notify("Hay un empleado repetido en la lista."); return; }
 
-    const span = endD - startD + 1;
     if (!appData.records[p]) appData.records[p] = {};
+    const span = endD - startD + 1;
+
+    const conflicted = quickRows.filter(r => {
+        const row = appData.records[p][r.empId];
+        return row && (parseFloat(r.amount) || 0) > 0 && hasConflict(normalizeRow(row), startD - 1, endD - 1, null, 0);
+    }).map(r => (appData.employees.find(e => e.id == r.empId) || {}).name);
     
-    // Inyectar Toneladas en la nota automáticamente si existen
+    if (conflicted.length && !confirm(`⚠️ Estas personas ya tienen guardias registradas en esos días:\n\n• ${conflicted.join('\n• ')}\n\n¿REEMPLAZAR esas guardias?`)) return;
+
     let finalObs = obs;
     if (tons > 0 && finalObs !== "") finalObs += ` / ${tons}TM`;
     else if (tons > 0) finalObs = `${tons}TM`;
 
+    const hours = calcHours(act, span);
+    let multipath = {};
+
     quickRows.forEach(row => {
         const eId = row.empId;
         const amount = parseFloat(row.amount) || 0;
-        let userRow = appData.records[p][eId];
-        if (!userRow) { userRow = Array(31).fill(null); } else if (userRow.length < 31) { while (userRow.length < 31) { userRow.push(null); } }
-        const oldRec = userRow[startD-1];
-        const oldSpan = oldRec ? (oldRec.span || 1) : 1;
-        for(let d=0; d<oldSpan; d++) { if((startD-1) + d < 31) userRow[(startD-1) + d] = null; }
-        for(let d=startD; d<=endD; d++) { userRow[d-1] = null; } 
+        const userRow = normalizeRow(appData.records[p][eId]);
+        for (let d = startD - 1; d <= endD - 1; d++) clearSpanAt(userRow, d);
+        
         if (amount > 0) {
-            const commonData = { role: row.role, site: site, activity: act, shift: row.shift, obs: finalObs };
-            userRow[startD-1] = { amount: amount, span: span, ...commonData };
-            for(let k=1; k < span; k++) { userRow[startD-1+k] = { amount: 0, linked: true, span: 0, ...commonData }; }
+            const commonData = { role: row.role, site: site, activity: act, shift: row.shift, obs: finalObs, isPhantom: false, hours: hours, ...auditStamp() };
+            userRow[startD - 1] = { amount: amount, span: span, ...commonData };
+            for (let k = 1; k < span; k++) { userRow[startD - 1 + k] = { amount: 0, linked: true, span: 0, ...commonData }; }
         }
         appData.records[p][eId] = userRow;
+        multipath[`records/${p}/${eId}`] = userRow;
     });
 
-    save(); renderTable(p); 
-    quickRows = [];
-    document.getElementById('qrObs').value = '';
-    document.getElementById('qrTons').value = '';
-    addQuickRow(); 
-    showToast("✅ ¡Operación guardada en la nómina!");
+    dbUpdate(multipath, "✅ ¡Operación guardada en la nómina!").then(() => {
+        renderTable(p);
+        quickRows = [];
+        document.getElementById('qrObs').value = '';
+        document.getElementById('qrTons').value = '';
+        addQuickRow();
+    });
 }
 
 function printQuickEntry() {
@@ -1765,143 +2091,242 @@ function printQuickEntry() {
     const obs = document.getElementById('qrObs').value.toUpperCase() || 'Ninguna';
     const tons = document.getElementById('qrTons').value || '0';
 
-    if(quickRows.length === 0) { alert("⚠️ Debes agregar al menos a una persona a la lista."); return; }
-    let validEmps = true; quickRows.forEach(r => { if(!r.empId) validEmps = false; });
-    if(!validEmps) { alert("⚠️ Hay filas sin empleado seleccionado. Verifica la lista."); return; }
+    if (quickRows.length === 0) { notify("Debes agregar al menos a una persona a la lista."); return; }
+    if (quickRows.some(r => !r.empId)) { notify("Hay filas sin empleado seleccionado. Verifica la lista."); return; }
 
     const printArea = document.getElementById('printQuickEntrySection');
-    
     let html = `<div class="qe-header">REPORTE DE OPERACIÓN - REGISTRO RÁPIDO</div>`;
     html += `<div style="font-size:10pt; color: #64748b; margin-bottom: 15px;">Generado el: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>`;
-
     html += `<div class="qe-info-grid">
-                <div class="qe-info-item"><b>Periodo:</b> ${p}</div>
-                <div class="qe-info-item"><b>Fechas:</b> Del ${startD} al ${endD}</div>
-                <div class="qe-info-item"><b>Sitio:</b> ${site}</div>
-                <div class="qe-info-item"><b>Actividad:</b> ${act}</div>
-                <div class="qe-info-item"><b>Toneladas:</b> ${tons} TM</div>
-                <div class="qe-info-item"><b>Embarcación / Notas:</b> ${obs}</div>
+                <div class="qe-info-item"><b>Periodo:</b> ${esc(p)}</div>
+                <div class="qe-info-item"><b>Fechas:</b> Del ${esc(startD)} al ${esc(endD)}</div>
+                <div class="qe-info-item"><b>Sitio:</b> ${esc(site)}</div>
+                <div class="qe-info-item"><b>Actividad:</b> ${esc(act)}</div>
+                <div class="qe-info-item"><b>Toneladas:</b> ${esc(tons)} TM</div>
+                <div class="qe-info-item"><b>Embarcación / Notas:</b> ${esc(obs)}</div>
              </div>`;
-
     html += `<h3 style="margin-bottom:5px; border-bottom:1px solid #ccc;">Personal Asignado</h3>`;
-    html += `<table class="sug-print-table">
-                <thead><tr style="background:#f1f5f9;">
-                    <th>Empleado</th>
-                    <th>Cargo</th>
-                    <th>Turno</th>
-                    <th style="text-align:right;">Monto ($)</th>
-                </tr></thead><tbody>`;
+    html += `<table class="sug-print-table"><thead><tr style="background:#f1f5f9;"><th>Empleado</th><th>Cargo</th><th>Turno</th><th style="text-align:right;">Monto ($)</th></tr></thead><tbody>`;
 
     let totalAmount = 0;
     quickRows.forEach(row => {
         const emp = appData.employees.find(e => e.id == row.empId);
-        const name = emp ? emp.name : 'Desconocido';
         const amount = parseFloat(row.amount) || 0;
         totalAmount += amount;
-        
-        html += `<tr>
-                    <td><b>${name}</b></td>
-                    <td>${row.role}</td>
-                    <td>${row.shift}</td>
-                    <td style="text-align:right;">$${amount}</td>
-                </tr>`;
+        html += `<tr><td><b>${esc(emp ? emp.name : 'Desconocido')}</b></td><td>${esc(row.role)}</td><td>${esc(row.shift)}</td><td style="text-align:right;">$${amount}</td></tr>`;
     });
+    html += `<tr style="font-weight:bold; background:#f8fafc;"><td colspan="3" style="text-align:right;">TOTAL OPERACIÓN:</td><td style="text-align:right; color:var(--accent);">$${totalAmount}</td></tr></tbody></table>`;
 
-    html += `<tr style="font-weight:bold; background:#f8fafc;">
-                <td colspan="3" style="text-align:right;">TOTAL OPERACIÓN:</td>
-                <td style="text-align:right; color:var(--accent);">$${totalAmount}</td>
-            </tr>`;
-    
-    html += `</tbody></table>`;
-    
     printArea.innerHTML = html;
-    
     document.body.classList.add('printing-quick-entry');
     window.print();
     document.body.classList.remove('printing-quick-entry');
 }
 
-/* --- LÓGICA DE SEGURIDAD Y LOGIN --- */
-
-// Escuchador de estado de sesión
+/* =========================================
+   SEGURIDAD Y LOGIN
+========================================= */
 auth.onAuthStateChanged(user => {
-    if (user) {
-        // Usuario logueado
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('mainApp').style.display = 'flex';
-        applyRoles(user.email);
-        init(); // Cargamos los datos de la nube
-    } else {
-        // Usuario no logueado
+    if (!user) {
         document.getElementById('loginScreen').style.display = 'flex';
         document.getElementById('mainApp').style.display = 'none';
+        return;
     }
+    currentUserEmail = (user.email || '').toLowerCase();
+    if (!USER_ROLES[currentUserEmail]) {
+        alert("Tu cuenta no tiene un rol asignado. Contacta al administrador.");
+        logoutUser();
+        return;
+    }
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'flex';
+    init().then(() => applyRoles(currentUserEmail));
 });
+
+function authErrorMsg(code) {
+    switch (code) {
+        case 'auth/invalid-email': return 'El correo no tiene un formato válido.';
+        case 'auth/user-disabled': return 'Esta cuenta está deshabilitada. Contacta al administrador.';
+        case 'auth/too-many-requests': return 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.';
+        case 'auth/network-request-failed': return 'Sin conexión a internet. Revisa tu red.';
+        default: return 'Correo o contraseña incorrectos.';
+    }
+}
 
 function loginUser(e) {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const pass = document.getElementById('loginPass').value;
     const btn = document.getElementById('loginBtn');
     const err = document.getElementById('loginError');
-    
-    btn.innerText = "Iniciando..."; err.style.display = "none";
-    
+
+    btn.innerText = "Iniciando..."; err.style.display = "none"; err.style.color = 'red';
     auth.signInWithEmailAndPassword(email, pass)
         .then(() => { btn.innerText = "Ingresar"; })
         .catch(error => {
             btn.innerText = "Ingresar";
-            // AHORA FIREBASE TE DIRÁ EXACTAMENTE CUÁL ES EL ERROR
-            err.innerText = "Error: " + error.message; 
+            console.error(error.code);
+            err.innerText = authErrorMsg(error.code);
             err.style.display = "block";
         });
 }
 
+(function addResetLink() {
+    const form = document.getElementById('loginForm');
+    if (!form) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'link-btn'; b.textContent = '¿Olvidaste tu contraseña?';
+    b.onclick = () => {
+        const email = document.getElementById('loginEmail').value.trim();
+        const err = document.getElementById('loginError');
+        err.style.display = 'block';
+        if (!email) { err.style.color = 'red'; err.innerText = 'Escribe tu correo arriba y vuelve a pulsar este enlace.'; return; }
+        auth.sendPasswordResetEmail(email).catch(() => { }).finally(() => {
+            err.style.color = '#15803d';
+            err.innerText = 'Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.';
+        });
+    };
+    form.appendChild(b);
+})();
+
 function logoutUser() {
     auth.signOut().then(() => {
-        appData = { employees: [], sites: [], activities: [], records: {}, historical2025: {} }; // Limpia memoria
+        appData = { employees: [], sites: [], activities: [], records: {}, historical2025: {}, tabuladores: {...DEFAULT_TABULADORES} };
         window.location.reload();
     });
 }
 
 function applyRoles(email) {
     const role = USER_ROLES[email.toLowerCase()] || "invitado";
-    
-    // Mostramos todo por defecto primero
-    document.querySelectorAll('.nav-btn').forEach(btn => btn.style.display = 'inline-block');
-    
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.style.display = '');
+    const hide = ids => ids.forEach(id => { document.getElementById('nav-' + id).style.display = 'none'; });
+
     if (role === "adminglobal") {
-        // Tiene acceso a todo, no ocultamos nada
         switchTab('config');
-    } 
-    else if (role === "manager") {
-       // Ocultar todo menos Sugerencias
-        document.getElementById('nav-config').style.display = 'none';
-        document.getElementById('nav-nomina').style.display = 'none';
-        document.getElementById('nav-registro').style.display = 'none';
+    } else if (role === "manager") {
+        hide(['config', 'nomina', 'registro']);
         switchTab('sugerencias');
-    }
-    else if (role === "rrhh") {
-       // Ocultar todo menos Sugerencias
-        document.getElementById('nav-config').style.display = 'none';
-        document.getElementById('nav-nomina').style.display = 'none';
-        document.getElementById('nav-registro').style.display = 'none';
-        document.getElementById('nav-graficos').style.display = 'none';
-        document.getElementById('nav-analytics').style.display = 'none';
+    } else if (role === "rrhh") {
+        hide(['config', 'nomina', 'registro', 'graficos', 'analytics']);
         switchTab('sugerencias');
-    } 
-    else if (role === "asistente") {
-        // Ocultar todo menos Registro Rápido
-        document.getElementById('nav-config').style.display = 'none';
-        document.getElementById('nav-nomina').style.display = 'none';
-        document.getElementById('nav-sugerencias').style.display = 'none';
-        document.getElementById('nav-graficos').style.display = 'none';
-        document.getElementById('nav-analytics').style.display = 'none';
+    } else if (role === "asistente") {
+        hide(['config', 'nomina', 'sugerencias', 'graficos', 'analytics']);
         switchTab('registro');
-    }
-    else {
-        // Si entra alguien que no está en la lista (emergencia de seguridad)
+    } else {
         alert("Tu cuenta no tiene un rol asignado. Contacta al administrador.");
         logoutUser();
+    }
+}
+
+/* =========================================
+   HERRAMIENTA DE MIGRACIÓN Y LIMPIEZA (FORZAR NOMBRE PROPIO)
+========================================= */
+function normalizarSitiosHistoricos() {
+    try {
+        if (!confirm("¿Deseas convertir TODOS los sitios (incluyendo los de Configuración y el historial) a formato Nombre Propio (Ej: 'Venalum', 'Casiterita')?")) return;
+
+        const formatTitle = (str) => {
+            if (!str) return '';
+            const lowerWords = ['de', 'del', 'la', 'los', 'las', 'en', 'y', 'a'];
+            return String(str).toLowerCase().trim().split(/\s+/).map((word, index) => {
+                if (!word) return '';
+                if (index > 0 && lowerWords.includes(word)) return word;
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            }).join(' ');
+        };
+
+        if (!appData || !appData.records) {
+            alert("⚠️ Los datos de la aplicación aún no se han cargado desde Firebase.");
+            return;
+        }
+
+        let updates = {};
+        let mapaSitiosExistentes = {};
+
+        if (!Array.isArray(appData.sites)) appData.sites = [];
+        
+        let sitiosUnicos = [];
+        let vistos = new Set();
+
+        appData.sites.forEach(s => {
+            if (!s || !String(s).trim()) return;
+            let formatted = formatTitle(s);
+            let key = formatted.toUpperCase();
+
+            if (!vistos.has(key)) {
+                vistos.add(key);
+                sitiosUnicos.push(formatted);
+            }
+            mapaSitiosExistentes[key] = formatted;
+        });
+
+        appData.sites = sitiosUnicos;
+        updates['sites'] = appData.sites;
+
+        let registrosCorregidos = 0;
+
+        Object.keys(appData.records).forEach(periodo => {
+            const recsPeriodo = appData.records[periodo];
+            if (!recsPeriodo) return;
+
+            Object.keys(recsPeriodo).forEach(empId => {
+                let row = recsPeriodo[empId];
+                if (!Array.isArray(row)) return;
+
+                let rowModificada = false;
+                row.forEach(rec => {
+                    if (!rec) return;
+
+                    if (rec.site && typeof rec.site === 'string') {
+                        let siteClean = rec.site.trim();
+                        let siteUpper = siteClean.toUpperCase();
+                        let nombreEstandar = mapaSitiosExistentes[siteUpper] || formatTitle(siteClean);
+
+                        if (!mapaSitiosExistentes[siteUpper]) {
+                            mapaSitiosExistentes[siteUpper] = nombreEstandar;
+                            appData.sites.push(nombreEstandar);
+                        }
+
+                        if (rec.site !== nombreEstandar) {
+                            rec.site = nombreEstandar;
+                            rowModificada = true;
+                            registrosCorregidos++;
+                        }
+                    }
+
+                    if (rec.muelle && typeof rec.muelle === 'string' && rec.muelle.toUpperCase() !== 'N/A') {
+                        let muelleClean = rec.muelle.trim();
+                        let muelleUpper = muelleClean.toUpperCase();
+                        let nombreEstandar = mapaSitiosExistentes[muelleUpper] || formatTitle(muelleClean);
+
+                        if (!mapaSitiosExistentes[muelleUpper]) {
+                            mapaSitiosExistentes[muelleUpper] = nombreEstandar;
+                            appData.sites.push(nombreEstandar);
+                        }
+
+                        if (rec.muelle !== nombreEstandar) {
+                            rec.muelle = nombreEstandar;
+                            rowModificada = true;
+                            registrosCorregidos++;
+                        }
+                    }
+                });
+
+                if (rowModificada) {
+                    updates[`records/${periodo}/${empId}`] = row;
+                }
+            });
+        });
+
+        dbUpdate(updates, "✨ Normalización completa").then(() => {
+            renderConfigLists();
+            handleMonthChange();
+            if (isTabActive('surveyors')) renderSurveyorTable(document.getElementById('monthSelectorSurv').value);
+            alert(`✅ Formato actualizado con éxito:\n\n• Todos los sitios de la lista ahora tienen formato Nombre Propio.\n• ${registrosCorregidos} registros corregidos en el historial.`);
+        });
+
+    } catch (err) {
+        console.error("Error en normalizarSitiosHistoricos:", err);
+        alert("❌ Ocurrió un error al ejecutar la limpieza: " + err.message);
     }
 }
