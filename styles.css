@@ -133,7 +133,11 @@ body {
 
 /* --- TABLAS Y NÓMINA --- */
 .table-wrapper { flex: 1; overflow: auto; background: white; }
-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.7rem; table-layout: fixed; } 
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.7rem; table-layout: fixed; }
+#payrollTable { min-width: 1360px; }
+#surveyorTable { min-width: 1280px; }
+.col-total { width: 80px; min-width: 80px; }
+.col-total-year { width: 90px; min-width: 90px; } 
 
 th { background: #f8fafc; position: sticky; top: 0; z-index: 10; padding: 0.3rem; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #e2e8f0; text-align: center; font-weight: 700; color: #475569; }
 .sticky-col { position: sticky; left: 0; background: white; z-index: 20; border-right: 2px solid #cbd5e1; width: 140px; }
@@ -159,8 +163,8 @@ th.day-invalid, td.day-invalid {
 .merged-cell { background: #e2e8f0; color: #1e293b; font-weight: bold; border-right: 1px solid #94a3b8; }
 .obs-dot { position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; background: var(--danger); border-radius: 50%; z-index: 6; }
 .center-text { text-align: center !important; }
-.total-cell-month { font-weight: bold; background: #f1f5f9; text-align: center !important; }
-.total-cell-year { font-weight: bold; color: var(--accent); text-align: center !important; }
+.total-cell-month { font-weight: bold; background: #f1f5f9; text-align: center !important; width: 80px; min-width: 80px; font-size: 0.75rem; white-space: nowrap; }
+.total-cell-year { font-weight: bold; color: var(--accent); text-align: center !important; width: 90px; min-width: 90px; font-size: 0.75rem; white-space: nowrap; }
 .dec2025-input { width: 100px; text-align: right; padding: 5px; border: 1px solid #cbd5e1; border-radius: 4px; }
 
 .cell-amt { font-size: 0.8rem; }
@@ -199,7 +203,7 @@ th.day-invalid, td.day-invalid {
 .shift-info { font-size: 0.75rem; color: #64748b; display: block; margin-top: 2px; }
 
 /* --- GRÁFICOS Y TOOLTIPS --- */
-.chart-container { position: relative; height: 350px; width: 100%; border: 1px solid var(--border); background: white; border-radius: 6px; margin-top: 10px; padding: 10px 10px 20px 40px; box-sizing: border-box; }
+.chart-container { position: relative; height: 350px; width: 100%; border: 1px solid var(--border); background: white; border-radius: 6px; margin-top: 10px; padding: 12px; box-sizing: border-box; }
 .chart-svg { width: 100%; height: 100%; overflow: visible; }
 .grid-line { stroke: #e2e8f0; stroke-width: 1; stroke-dasharray: 4; }
 .axis-text { font-size: 10px; fill: #64748b; font-family: monospace; }
@@ -426,3 +430,11 @@ th.day-invalid, td.day-invalid {
     background-color: #fee2e2;
     border-color: #fca5a5;
 }
+
+/* TOGGLE VER EN MONTOS / VER EN HORAS */
+.view-mode-toggle { display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #f8fafc; }
+.mode-toggle-btn { background: transparent; border: none; padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: #64748b; transition: all 0.15s ease-in-out; }
+.mode-toggle-btn.active { background: var(--accent); color: white; }
+.mode-toggle-btn:hover:not(.active) { background: #e2e8f0; color: #1e293b; }
+
+.st-egreso { color: #dc2626; font-weight: bold; background: #fef2f2; border-color: #fecaca; }

@@ -91,6 +91,20 @@
                                 <button type="button" onclick="addEmployee()" class="compact-btn btn-add">+</button>
                             </div>
                             <ul class="list-group" id="employeeList"></ul>
+                            
+                            <!-- APARTADO DE EGRESOS / HISTÓRICO -->
+                            <div class="egresados-wrapper" style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none;" onclick="toggleEgresadosList()">
+                                    <h4 style="margin:0; font-size:0.85rem; color:#64748b; display:flex; align-items:center; gap:6px;">
+                                        📁 Personal Egresado / Histórico (<span id="egresadosCount" style="font-weight:bold; color:#b91c1c;">0</span>)
+                                    </h4>
+                                    <span id="egresadosArrow" style="color:#94a3b8; font-size:0.75rem; transition:transform 0.2s;">▼ Mostrar</span>
+                                </div>
+                                <div id="egresadosContainer" style="display:none; margin-top:10px; background:#f8fafc; border-radius:6px; padding:10px; border:1px solid #e2e8f0;">
+                                    <p style="font-size:0.75rem; color:#64748b; margin-top:0; margin-bottom:8px;">Este personal no aparece en listas activas ni en sugerencias de guardia, pero conserva todo su historial financiero. Si reingresan a la empresa, puedes cambiar su estatus a Disponible.</p>
+                                    <ul class="list-group" id="egresadosList"></ul>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="card">
@@ -134,7 +148,12 @@
 
                     <div class="search-box">
                         <span class="search-icon">🔍</span>
-                        <input type="text" id="searchPayroll" class="search-input" placeholder="Buscar empleado..." onkeyup="renderTable(document.getElementById('monthSelector').value)">
+                        <input type="text" id="searchPayroll" class="search-input" placeholder="Buscar empleado, buque, nota..." onkeyup="renderTable(document.getElementById('monthSelector').value)">
+                    </div>
+
+                    <div class="view-mode-toggle">
+                        <button type="button" id="btnModeMoney" class="mode-toggle-btn active" onclick="setPayrollViewMode('money')">💵 $ Montos</button>
+                        <button type="button" id="btnModeHours" class="mode-toggle-btn" onclick="setPayrollViewMode('hours')">⏱️ Horas</button>
                     </div>
 
                     <div class="toolbar-group">
@@ -529,6 +548,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
 
 </body>

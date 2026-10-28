@@ -67,7 +67,8 @@ const DEFAULT_EMPLOYEES = [
     { id: 17, name: "ENRIQUE GONZALEZ", role: "Inspector", status: "Disponible", distanceScore: 6 },
     { id: 18, name: "KEINEL PALENCIA", role: "Inspector", status: "Disponible", distanceScore: 4 },
     { id: 19, name: "BRAYAN PEREZ", role: "Inspector", status: "Disponible", distanceScore: 6 },
-    { id: 20, name: "CARLOS CORO", role: "Inspector", status: "Disponible", distanceScore: 8 }
+    { id: 20, name: "CARLOS CORO", role: "Inspector", status: "Disponible", distanceScore: 8 },
+    { id: 21, name: "JULIE PEÑA", role: "Inspector", status: "Egreso", distanceScore: 5 }
 ];
 
 const DEFAULT_TABULADORES = {
@@ -112,8 +113,10 @@ let copiedRecordData = null;
 let copiedSurvRecordData = null;
 let dataLoaded = false;
 let currentUserEmail = '';
+let payrollViewMode = 'money'; // 'money' | 'hours'
 let transRangeMonth = '';
 let toastTimer = null;
+const chartInstances = {};
 
 /* =========================================
    UTILIDADES
@@ -289,6 +292,14 @@ function loadParsedData(parsed, isEmbedded) {
     
     appData.tabuladores = parsed.tabuladores || {...DEFAULT_TABULADORES};
 
+    const diegoEmp = parsed.employees.find(e => e.id == 4);
+    if (diegoEmp && diegoEmp.status === "Fuera de Servicio") diegoEmp.status = "Egreso";
+
+    // Auto-recuperar a Julie Peña si existe su histórico 2025 y falta en empleados
+    if (parsed.historical2025 && (parsed.historical2025[21] || parsed.historical2025['21']) && !parsed.employees.some(e => e.id == 21)) {
+        parsed.employees.push({ id: 21, name: "JULIE PEÑA", role: "Inspector", status: "Fuera de Servicio", distanceScore: 5 });
+    }
+
     parsed.employees.forEach(e => {
         if (!e.status) e.status = "Disponible";
         if (e.distanceScore === undefined) {
@@ -452,8 +463,9 @@ function matchesPayrollFilter(emp, period, filter) {
     return userRecs.some(rec => {
         if (!rec) return false;
         const act = rec.activity && rec.activity.toUpperCase().includes(filter);
-        const loc = rec.site || rec.location || rec.muelle;
-        return act || (loc && loc.toUpperCase().includes(filter));
+        const loc = (rec.site || rec.location || rec.muelle || '').toUpperCase().includes(filter);
+        const obs = (rec.obs || rec.vessel || '').toUpperCase().includes(filter);
+        return act || loc || obs;
     });
 }
 
@@ -462,19 +474,43 @@ function cellClick(td, eid, i, kind) {
     if (isTouch()) { if (kind === 'surv') openSurvEditor(eid, i); else openEditor(eid, i); }
 }
 
+
+function setPayrollViewMode(mode) {
+    payrollViewMode = mode;
+    const btnMoney = document.getElementById('btnModeMoney');
+    const btnHours = document.getElementById('btnModeHours');
+    if (btnMoney && btnHours) {
+        btnMoney.classList.toggle('active', mode === 'money');
+        btnHours.classList.toggle('active', mode === 'hours');
+    }
+    const p = document.getElementById('monthSelector').value;
+    renderTable(p);
+}
+
 function renderTable(period) {
     const tbody = document.getElementById('tableBody'); const thead = document.getElementById('tableHeader');
     const printBody = document.getElementById('printBody');
     tbody.innerHTML = ''; printBody.innerHTML = '';
     if (!appData.records[period]) appData.records[period] = {};
     const filter = document.getElementById('searchPayroll').value.toUpperCase();
+    const isHours = (payrollViewMode === 'hours');
+
     let h = `<th class="sticky-col sticky-col-header" style="text-align:left; min-width:140px;">EMPLEADO</th>`;
     for (let i = 1; i <= DAYS_IN_MONTH; i++) {
         const m = dayMeta(period, i);
         h += `<th class="day-col${m.weekend ? ' day-weekend' : ''}${m.invalid ? ' day-invalid' : ''}"><div>${i}</div><div class="wk">${m.wk}</div></th>`;
     }
-    h += `<th class="center-text">TOTAL MES</th><th class="center-text">ACUM. ANUAL</th>`;
+    const col1Title = isHours ? 'TOTAL HORAS' : 'TOTAL MES';
+    const col2Title = isHours ? 'ACUM. HORAS' : 'ACUM. ANUAL';
+    h += `<th class="col-total center-text">${col1Title}</th><th class="col-total-year center-text">${col2Title}</th>`;
     thead.innerHTML = h;
+
+    // Update Print Header Title if in hours mode
+    const printTitleEl = document.getElementById('printHeaderTitle');
+    if (printTitleEl) {
+        printTitleEl.innerText = isHours ? 'REPORTE DE HORAS TRABAJADAS' : 'REPORTE DE NÓMINA';
+    }
+
     let grandTotal = 0; const year = periodYear(period); const usedSites = new Set();
 
     appData.employees.forEach(emp => {
@@ -482,49 +518,70 @@ function renderTable(period) {
         if (!matchesPayrollFilter(emp, period, filter)) return;
         if (!appData.records[period][emp.id]) appData.records[period][emp.id] = Array(DAYS_IN_MONTH).fill(null);
         const row = appData.records[period][emp.id];
-        let mTotal = 0; let cells = '';
+        let mTotal = 0; let mHours = 0; let cells = '';
+
         for (let i = 0; i < DAYS_IN_MONTH; i++) {
             const rec = row[i]; const m = dayMeta(period, i + 1);
             if (rec && rec.span > 1) {
                 const phantomClass = rec.isPhantom ? 'phantom-cell' : '';
                 const shiftIcon = rec.isPhantom ? '🚫' : (rec.shift === 'Diurno' ? '☀️' : (rec.shift === 'Nocturno' ? '🌙' : ''));
                 const amtNum = parseFloat(rec.amount) || 0;
+                const hoursNum = parseFloat(rec.hours) || 0;
                 const stripe = (!rec.isPhantom && rec.site) ? `box-shadow: inset 0 -3px 0 ${siteColor(rec.site)};` : '';
                 if (!rec.isPhantom && rec.site) usedSites.add(rec.site);
-                cells += `<td colspan="${rec.span}" class="data-cell merged-cell ${phantomClass}" style="${stripe}" data-tooltip="${esc(buildTooltip(rec))}" onclick="cellClick(this, ${emp.id}, ${i}, 'nom')" ondblclick="openEditor(${emp.id}, ${i})">${rec.obs ? '<div class="obs-dot"></div>' : ''}<div class="cell-amt">$${amtNum}</div><div class="cell-sub">${shiftIcon} ${esc(rec.activity)}</div></td>`;
-                if (!rec.isPhantom) mTotal += amtNum;
+
+                const valDisplay = isHours ? `${hoursNum}h` : `$${amtNum}`;
+                cells += `<td colspan="${rec.span}" class="data-cell merged-cell ${phantomClass}" style="${stripe}" data-tooltip="${esc(buildTooltip(rec))}" onclick="cellClick(this, ${emp.id}, ${i}, 'nom')" ondblclick="openEditor(${emp.id}, ${i})">${rec.obs ? '<div class="obs-dot"></div>' : ''}<div class="cell-amt" style="${isHours ? 'color:#0284c7; font-weight:700;' : ''}">${valDisplay}</div><div class="cell-sub">${shiftIcon} ${esc(rec.activity)}</div></td>`;
+                if (!rec.isPhantom) { mTotal += amtNum; mHours += hoursNum; }
                 i += (rec.span - 1);
             } else if (rec && rec.linked) {
                 cells += `<td class="data-cell" style="background:#f1f5f9;">-</td>`;
             } else {
                 const amt = rec ? (parseFloat(rec.amount) || 0) : 0;
-                if (!rec || !rec.isPhantom) mTotal += amt;
+                const hoursNum = rec ? (parseFloat(rec.hours) || 0) : 0;
+                if (!rec || !rec.isPhantom) { mTotal += amt; mHours += hoursNum; }
                 if (!rec && m.invalid) { cells += `<td class="data-cell day-col day-invalid"></td>`; continue; }
                 const phantomClass = (rec && rec.isPhantom) ? 'phantom-cell' : '';
                 let shiftIcon = '';
                 if (rec && rec.isPhantom) shiftIcon = '<span style="font-size:0.6rem;">🚫</span>';
                 else if (rec && rec.shift === 'Diurno') shiftIcon = '<span class="shift-day" style="font-size:0.6rem;">☀</span>';
                 else if (rec && rec.shift === 'Nocturno') shiftIcon = '<span class="shift-night" style="font-size:0.6rem;">☾</span>';
-                const stripe = (rec && !rec.isPhantom && amt > 0 && rec.site) ? `style="box-shadow: inset 0 -3px 0 ${siteColor(rec.site)};"` : '';
-                if (rec && !rec.isPhantom && amt > 0 && rec.site) usedSites.add(rec.site);
-                const tip = (rec && amt > 0) ? ` data-tooltip="${esc(buildTooltip(rec))}"` : '';
-                cells += `<td class="data-cell day-col ${amt > 0 ? 'has-data' : ''} ${phantomClass} ${m.weekend ? 'wk-end' : ''}" ${stripe}${tip} onclick="cellClick(this, ${emp.id}, ${i}, 'nom')" ondblclick="openEditor(${emp.id}, ${i})">${(rec && rec.obs) ? '<div class="obs-dot"></div>' : ''}${amt > 0 ? amt : ''}${shiftIcon}</td>`;
+                const stripe = (rec && !rec.isPhantom && (amt > 0 || hoursNum > 0) && rec.site) ? `style="box-shadow: inset 0 -3px 0 ${siteColor(rec.site)};"` : '';
+                if (rec && !rec.isPhantom && (amt > 0 || hoursNum > 0) && rec.site) usedSites.add(rec.site);
+                const tip = (rec && (amt > 0 || hoursNum > 0)) ? ` data-tooltip="${esc(buildTooltip(rec))}"` : '';
+
+                let cellDisplay = '';
+                if (isHours) {
+                    cellDisplay = (rec && rec.isPhantom) ? '🚫' : (hoursNum > 0 ? `${hoursNum}h` : '');
+                } else {
+                    cellDisplay = amt > 0 ? amt : '';
+                }
+
+                cells += `<td class="data-cell day-col ${(amt > 0 || hoursNum > 0) ? 'has-data' : ''} ${phantomClass} ${m.weekend ? 'wk-end' : ''}" ${stripe}${tip} onclick="cellClick(this, ${emp.id}, ${i}, 'nom')" ondblclick="openEditor(${emp.id}, ${i})">${(rec && rec.obs) ? '<div class="obs-dot"></div>' : ''}${cellDisplay}${shiftIcon}</td>`;
             }
         }
-        grandTotal += mTotal;
-        const yTotal = yearSums(emp.id, year).amt;
 
-        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+        const ys = yearSums(emp.id, year);
+        const col1Val = isHours ? `${mHours}h` : mTotal;
+        const col2Val = isHours ? `${ys.hours}h` : ys.amt;
+        grandTotal += isHours ? mHours : mTotal;
+
+        if ((emp.status === "Fuera de Servicio" || emp.status === "Egreso") && mTotal === 0 && mHours === 0) return;
 
         const tr = document.createElement('tr');
-        if (emp.status === "Fuera de Servicio") tr.className = 'inactive-row';
-        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem;">${esc(emp.name)}</div><div style="font-size:0.65rem; color:#64748b">${esc(emp.role)}</div></td>${cells}<td class="total-cell-month center-text">${mTotal}</td><td class="total-cell-year center-text">${yTotal}</td>`;
+        if (emp.status === "Fuera de Servicio" || emp.status === "Egreso") tr.className = 'inactive-row';
+        tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem;">${esc(emp.name)}</div><div style="font-size:0.65rem; color:#64748b">${esc(emp.role)}</div></td>${cells}<td class="total-cell-month center-text" style="${isHours ? 'color:#0284c7;' : ''}">${col1Val}</td><td class="total-cell-year center-text" style="${isHours ? 'color:#0284c7;' : ''}">${col2Val}</td>`;
         tbody.appendChild(tr);
+
         const trPrint = document.createElement('tr');
-        trPrint.innerHTML = `<td>${esc(emp.name)}<br><small style="font-style:italic;">${esc(emp.role)}</small></td><td class="text-center">$${mTotal.toLocaleString()}</td><td class="text-center">$${yTotal.toLocaleString()}</td>`;
+        const printCol1 = isHours ? `${mHours} h` : `$${mTotal.toLocaleString()}`;
+        const printCol2 = isHours ? `${ys.hours} h` : `$${ys.amt.toLocaleString()}`;
+        trPrint.innerHTML = `<td>${esc(emp.name)}<br><small style="font-style:italic;">${esc(emp.role)}</small></td><td class="text-center">${printCol1}</td><td class="text-center">${printCol2}</td>`;
         printBody.appendChild(trPrint);
     });
-    document.getElementById('monthTotal').innerText = grandTotal.toLocaleString();
+
+    const totalLabel = isHours ? `${grandTotal.toLocaleString()} h` : `${grandTotal.toLocaleString()}`;
+    document.getElementById('monthTotal').innerText = totalLabel;
 
     let legend = document.getElementById('siteLegend');
     if (!legend) {
@@ -699,7 +756,7 @@ function renderSuggestions() {
 
     ROLES.forEach(role => {
         const group = appData.employees.filter(e => e.role === role);
-        const activeGroup = group.filter(e => e.status !== "Vacaciones" && e.status !== "Reposo" && e.status !== "Fuera de Servicio");
+        const activeGroup = group.filter(e => e.status !== "Vacaciones" && e.status !== "Reposo" && e.status !== "Fuera de Servicio" && e.status !== "Egreso");
 
         const ranking = activeGroup.map(emp => {
             const r = {
@@ -1014,6 +1071,16 @@ function renderDispersion(afterEl) {
     box.innerHTML = `<h3>⚖️ Equidad de ingresos por cargo — ${year}</h3><table class="disp-table"><thead><tr><th>Cargo</th><th>Personas</th><th>Mínimo</th><th>Promedio</th><th>Máximo</th><th>Brecha</th></tr></thead><tbody>${rows || '<tr><td colspan="6">Sin datos suficientes</td></tr>'}</tbody></table><div class="disp-note">Solo personal activo.</div>`;
 }
 
+
+function formatPeriodShort(p) {
+    const parts = String(p || '').split(' ');
+    if (parts.length < 2) return p;
+    const m = parts[0].slice(0, 3);
+    const mCap = m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+    const y = parts[1].slice(-2);
+    return `${mCap} '${y}`;
+}
+
 function chartPeriodList() {
     const all = PERIODS.filter(p => p !== DEC_2025);
     let last = -1;
@@ -1024,6 +1091,8 @@ function chartPeriodList() {
 
 function renderAnalyticsCharts() {
     const chartPeriods = chartPeriodList();
+    const shortLabels = chartPeriods.map(formatPeriodShort);
+
     const monthlyData = chartPeriods.map(p => {
         let mTotal = 0; const mRoles = emptyRoleObj();
         if (appData.records[p]) {
@@ -1043,16 +1112,86 @@ function renderAnalyticsCharts() {
         return { label: p, total: mTotal, roles: mRoles };
     });
 
-    const globalSeries = [{ name: "Total Global", values: monthlyData.map(d => d.total), color: "#F29100", id: "g-total", visible: true }];
-    drawSVG(document.getElementById('chart-GlobalMonthly'), document.getElementById('legend-GlobalMonthly'), globalSeries, chartPeriods);
+    // 1. Gráfico Global (Evolución de Gasto Mensual) - Área suave
+    renderChartJS('GlobalMonthly', {
+        type: 'line',
+        data: {
+            labels: shortLabels,
+            datasets: [{
+                label: 'Gasto Total ($)',
+                data: monthlyData.map(d => d.total),
+                borderColor: '#F29100',
+                backgroundColor: 'rgba(242, 145, 0, 0.12)',
+                fill: true,
+                tension: 0.35,
+                borderWidth: 3,
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                pointBackgroundColor: '#ffffff',
+                pointBorderColor: '#F29100',
+                pointBorderWidth: 2.5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    padding: 10,
+                    callbacks: { label: ctx => ` Total: $${Number(ctx.parsed.y).toLocaleString()}` }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { family: "'Segoe UI', sans-serif", size: 11 }, color: '#64748b' } },
+                y: {
+                    grid: { color: '#f1f5f9' },
+                    ticks: { font: { family: "'Segoe UI', sans-serif", size: 11 }, color: '#64748b', callback: v => '$' + Number(v).toLocaleString() },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
 
-    const roleSeries = [
-        { name: "Supervisor", values: monthlyData.map(d => d.roles['Supervisor']), color: ROLE_COLORS['Supervisor'], id: "r-sup", visible: !hiddenSeries["r-sup"] },
-        { name: "Técnico", values: monthlyData.map(d => d.roles['Tecnico de Seguridad']), color: ROLE_COLORS['Tecnico de Seguridad'], id: "r-tec", visible: !hiddenSeries["r-tec"] },
-        { name: "Inspector", values: monthlyData.map(d => d.roles['Inspector']), color: ROLE_COLORS['Inspector'], id: "r-ins", visible: !hiddenSeries["r-ins"] },
-        { name: "Surveyor", values: monthlyData.map(d => d.roles['Surveyor']), color: ROLE_COLORS['Surveyor'], id: "r-sur", visible: !hiddenSeries["r-sur"] }
-    ];
-    drawSVG(document.getElementById('chart-RoleMonthly'), document.getElementById('legend-RoleMonthly'), roleSeries, chartPeriods);
+    // 2. Gráfico por Puesto (Barras Apiladas Modernas)
+    renderChartJS('RoleMonthly', {
+        type: 'bar',
+        data: {
+            labels: shortLabels,
+            datasets: [
+                { label: 'Supervisor', data: monthlyData.map(d => d.roles['Supervisor']), backgroundColor: '#2563eb', borderRadius: 4 },
+                { label: 'Técnico de Seguridad', data: monthlyData.map(d => d.roles['Tecnico de Seguridad']), backgroundColor: '#16a34a', borderRadius: 4 },
+                { label: 'Inspector', data: monthlyData.map(d => d.roles['Inspector']), backgroundColor: '#d97706', borderRadius: 4 },
+                { label: 'Surveyor', data: monthlyData.map(d => d.roles['Surveyor']), backgroundColor: '#8b5cf6', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'circle', font: { family: "'Segoe UI', sans-serif", size: 12, weight: '600' }, color: '#475569' }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    padding: 10,
+                    callbacks: { label: ctx => ` ${ctx.dataset.label}: $${Number(ctx.parsed.y).toLocaleString()}` }
+                }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { font: { family: "'Segoe UI', sans-serif", size: 11 }, color: '#64748b' } },
+                y: {
+                    stacked: true,
+                    grid: { color: '#f1f5f9' },
+                    ticks: { font: { family: "'Segoe UI', sans-serif", size: 11 }, color: '#64748b', callback: v => '$' + Number(v).toLocaleString() },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
 }
 
 function renderYearCard(year, data) {
@@ -1060,76 +1199,114 @@ function renderYearCard(year, data) {
 }
 
 /* =========================================
-   GRÁFICOS
+   GRÁFICOS MODERNOS CON CHART.JS
 ========================================= */
-let hiddenSeries = {};
-function toggleSeries(seriesId) {
-    if (hiddenSeries[seriesId]) delete hiddenSeries[seriesId]; else hiddenSeries[seriesId] = true;
-    if (isTabActive('graficos')) renderAllCharts(); else renderAnalyticsCharts();
+function renderAllCharts() {
+    renderChart('Supervisor');
+    renderChart('Tecnico de Seguridad');
+    renderChart('Inspector');
 }
-function renderAllCharts() { renderChart('Supervisor'); renderChart('Tecnico de Seguridad'); renderChart('Inspector'); }
 
 function renderChart(roleFilter) {
     const idBase = roleFilter.split(' ')[0];
-    const container = document.getElementById(`chart-${idBase}`); const legCont = document.getElementById(`legend-${idBase}`);
-    if (!container) return; container.innerHTML = ''; legCont.innerHTML = '';
     const chartPeriods = chartPeriodList();
+    const shortLabels = chartPeriods.map(formatPeriodShort);
 
-    const dataSeries = [];
+    const datasets = [];
     appData.employees.filter(e => e.role === roleFilter).forEach((e, idx) => {
         const vals = chartPeriods.map(p => sumPeriod(e.id, p, false));
-        if (e.status === "Fuera de Servicio" && vals.every(v => v === 0)) return;
-        const sId = `line-${idBase}-${e.id}`;
-        dataSeries.push({ name: e.name, values: vals, color: PALETTE[idx % PALETTE.length], id: sId, visible: !hiddenSeries[sId] });
-    });
-    drawSVG(container, legCont, dataSeries, chartPeriods);
-}
-
-function drawSVG(container, legCont, dataSeries, labels) {
-    container.innerHTML = ''; legCont.innerHTML = '';
-    let maxVal = 0; dataSeries.forEach(s => { if (s.visible && s.values.length) maxVal = Math.max(maxVal, ...s.values); });
-    if (maxVal === 0) maxVal = 1000;
-    const w = container.clientWidth; const h = container.clientHeight;
-    if (w <= 0 || h <= 0) return;
-    const padL = 48, padB = 25, padT = 10; const chW = w - padL - 10, chH = h - padB - padT;
-    const ns = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("class", "chart-svg");
-    for (let i = 0; i <= 5; i++) {
-        const y = (padT + chH) - (i / 5 * chH); const v = Math.round((i / 5) * maxVal);
-        const l = document.createElementNS(ns, "line"); l.setAttribute("x1", padL); l.setAttribute("y1", y); l.setAttribute("x2", w); l.setAttribute("y2", y); l.setAttribute("class", "grid-line"); svg.appendChild(l);
-        const t = document.createElementNS(ns, "text"); t.setAttribute("x", padL - 5); t.setAttribute("y", y + 3); t.setAttribute("text-anchor", "end"); t.setAttribute("class", "axis-text"); t.textContent = `$${v.toLocaleString()}`; svg.appendChild(t);
-    }
-    const xStep = chW / (labels.length - 1 || 1);
-    const multiYear = new Set(labels.map(periodYear)).size > 1;
-    labels.forEach((p, i) => {
-        const x = padL + i * xStep;
-        const t = document.createElementNS(ns, "text"); t.setAttribute("x", x); t.setAttribute("y", h - 5); t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "axis-text");
-        const yy = String(periodYear(p)).slice(-2);
-        t.textContent = p.split(' ')[0].substr(0, 3) + (multiYear ? `'${yy}` : '');
-        svg.appendChild(t);
-    });
-    dataSeries.forEach(s => {
-        const li = document.createElement("div"); li.className = `legend-item ${s.visible ? '' : 'inactive'}`;
-        li.tabIndex = 0;
-        li.innerHTML = `<div class="legend-color" style="background:${s.color}"></div><div class="legend-text">${esc(s.name)}</div>`;
-        li.onclick = () => toggleSeries(s.id);
-        li.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleSeries(s.id); } };
-        li.onmouseenter = () => { if (s.visible) highlight(svg, s.id); }; li.onmouseleave = () => { if (s.visible) unhighlight(svg); };
-        legCont.appendChild(li);
-        if (!s.visible) return;
-        let d = ""; s.values.forEach((v, i) => {
-            const x = padL + i * xStep; const y = (padT + chH) - (v / maxVal) * chH; d += (i === 0 ? "M" : "L") + ` ${x} ${y}`;
-            const pt = document.createElementNS(ns, "circle"); pt.setAttribute("cx", x); pt.setAttribute("cy", y); pt.setAttribute("r", 4); pt.setAttribute("stroke", s.color); pt.setAttribute("class", `chart-point point-${s.id}`);
-            pt.addEventListener('mouseenter', (e) => showTooltip(e, s.name, labels[i], v)); pt.addEventListener('mouseleave', hideTooltip);
-            pt.addEventListener('click', (e) => showTooltip(e, s.name, labels[i], v));
-            svg.appendChild(pt);
+        if ((e.status === "Fuera de Servicio" || e.status === "Egreso") && vals.every(v => v === 0)) return;
+        const color = PALETTE[idx % PALETTE.length];
+        datasets.push({
+            label: e.name,
+            data: vals,
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: 2.5,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 7,
+            pointBackgroundColor: '#ffffff',
+            pointBorderColor: color,
+            pointBorderWidth: 2
         });
-        const pth = document.createElementNS(ns, "path"); pth.setAttribute("d", d); pth.setAttribute("stroke", s.color); pth.setAttribute("class", `chart-line line-${s.id}`); svg.prepend(pth);
     });
-    container.appendChild(svg);
+
+    renderChartJS(idBase, {
+        type: 'line',
+        data: {
+            labels: shortLabels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 10,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        font: { family: "'Segoe UI', sans-serif", size: 11, weight: '600' },
+                        color: '#475569',
+                        padding: 12
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    padding: 10,
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: $${Number(ctx.parsed.y).toLocaleString()}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { family: "'Segoe UI', sans-serif", size: 11 }, color: '#64748b' }
+                },
+                y: {
+                    grid: { color: '#f1f5f9' },
+                    ticks: {
+                        font: { family: "'Segoe UI', sans-serif", size: 11 },
+                        color: '#64748b',
+                        callback: v => '$' + Number(v).toLocaleString()
+                    },
+                    beginAtZero: true
+                }
+            }
+        }
+    });
 }
 
-function highlight(svg, id) { svg.querySelectorAll('.chart-line,.chart-point').forEach(e => e.classList.add('faded')); svg.querySelectorAll(`.line-${id},.point-${id}`).forEach(e => { e.classList.remove('faded'); e.classList.add('highlight'); }); }
-function unhighlight(svg) { svg.querySelectorAll('*').forEach(e => { e.classList.remove('faded'); e.classList.remove('highlight'); }); }
+function renderChartJS(chartId, config) {
+    const container = document.getElementById('chart-' + chartId);
+    if (!container) return;
+
+    const legCont = document.getElementById('legend-' + chartId);
+    if (legCont) legCont.style.display = 'none';
+
+    // Destroy existing instance if present
+    if (chartInstances[chartId]) {
+        chartInstances[chartId].destroy();
+        delete chartInstances[chartId];
+    }
+
+    // Clean container and create canvas
+    container.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    canvas.id = 'canvas-' + chartId;
+    container.appendChild(canvas);
+
+    // If Chart library is available, instantiate
+    if (typeof Chart !== 'undefined') {
+        chartInstances[chartId] = new Chart(canvas, config);
+    } else {
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;">Cargando motor de gráficos...</div>';
+    }
+}
 
 const tt = document.getElementById('globalTooltip');
 if (tt) {
@@ -1188,8 +1365,24 @@ function renderL(id, arr, fmt, del) {
     });
 }
 
+
+function toggleEgresadosList() {
+    const box = document.getElementById('egresadosContainer');
+    const arrow = document.getElementById('egresadosArrow');
+    if (!box) return;
+    const isHidden = (box.style.display === 'none' || !box.style.display);
+    box.style.display = isHidden ? 'block' : 'none';
+    if (arrow) arrow.innerText = isHidden ? '▲ Ocultar' : '▼ Mostrar';
+}
+
 function renderConfigLists() {
-    renderL('employeeList', appData.employees, e => `<div style="display:flex;align-items:center;width:100%;gap:10px;flex-wrap:wrap;">
+    const activeEmps = appData.employees.filter(e => e.status !== 'Egreso');
+    const egresados = appData.employees.filter(e => e.status === 'Egreso');
+
+    const countEl = document.getElementById('egresadosCount');
+    if (countEl) countEl.innerText = egresados.length;
+
+    renderL('employeeList', activeEmps, e => `<div style="display:flex;align-items:center;width:100%;gap:10px;flex-wrap:wrap;">
         <div style="flex:1;min-width:120px;"><b>${esc(e.name)}</b></div>
         <input type="number" class="dist-select" min="1" max="10" title="Distancia (1-10)" value="${e.distanceScore || 5}" onchange="changeDistance(${e.id}, this.value)">
         <select class="role-select" onchange="changeRole(${e.id},this.value)">
@@ -1205,14 +1398,26 @@ function renderConfigLists() {
             <option value="Reposo" ${e.status === 'Reposo' ? 'selected' : ''}>🔴 Reposo</option>
             <option value="No Justificado" ${e.status === 'No Justificado' ? 'selected' : ''}>🔴 No Just.</option>
             <option value="Fuera de Servicio" ${e.status === 'Fuera de Servicio' ? 'selected' : ''}>⚫ Inactivo</option>
+            <option value="Egreso" ${e.status === 'Egreso' ? 'selected' : ''}>🚪 Dar Egreso</option>
         </select>
     </div>`, (id) => deleteEmployee(id));
+
+    // Renderizar lista separada de egresados
+    renderL('egresadosList', egresados, e => `<div style="display:flex;align-items:center;width:100%;gap:10px;flex-wrap:wrap;opacity:0.85;">
+        <div style="flex:1;min-width:120px;"><b>${esc(e.name)}</b> <span style="font-size:0.7rem; color:#dc2626; font-weight:600;">(Egresado)</span></div>
+        <span style="font-size:0.75rem; color:#64748b; margin-right:5px;">${esc(e.role)}</span>
+        <select class="status-select st-egreso" onchange="changeStatus(${e.id},this.value)">
+            <option value="Egreso" selected>🚪 Egreso (Histórico)</option>
+            <option value="Disponible">🟢 Reincorporar a Disponible</option>
+            <option value="Fuera de Servicio">⚫ Pasar a Inactivo</option>
+        </select>
+    </div>`, (id) => false); // Los egresados no se borran
 
     renderL('siteList', appData.sites, s => esc(s), i => { appData.sites.splice(i, 1); dbUpdate({ 'sites': appData.sites }); });
     renderL('activityList', appData.activities, a => esc(a), i => { appData.activities.splice(i, 1); dbUpdate({ 'activities': appData.activities }); });
 }
 
-function getStatusClass(s) { if (s === 'Disponible') return 'st-active'; if (s === 'En Guardia') return 'st-busy'; if (s === 'Fuera de Servicio') return 'st-inactive'; return 'st-vacation'; }
+function getStatusClass(s) { if (s === 'Disponible') return 'st-active'; if (s === 'En Guardia') return 'st-busy'; if (s === 'Fuera de Servicio') return 'st-inactive'; if (s === 'Egreso') return 'st-egreso'; return 'st-vacation'; }
 function fillSelect(id, opts, sel) { const el = document.getElementById(id); el.innerHTML = ''; opts.forEach(o => { const op = document.createElement('option'); op.value = o; op.innerText = o; if (o === sel) op.selected = true; el.appendChild(op); }); }
 function fillSelectOther(id, opts, sel) {
     const el = document.getElementById(id); el.innerHTML = ''; let found = false;
@@ -1253,22 +1458,19 @@ function getLastOperationalShift(empId) {
     }
     return null;
 }
-function changeStatus(id, newStatus) { const emp = appData.employees.find(e => e.id == id); if (emp) { emp.status = newStatus; dbUpdate({ 'employees': appData.employees }).then(renderSuggestions); } }
+function changeStatus(id, newStatus) { const emp = appData.employees.find(e => e.id == id); if (emp) { emp.status = newStatus; dbUpdate({ 'employees': appData.employees }).then(() => { renderConfigLists(); renderSuggestions(); }); } }
 function changeRole(id, newRole) { const emp = appData.employees.find(e => e.id == id); if (emp) { emp.role = newRole; dbUpdate({ 'employees': appData.employees }).then(() => { renderConfigLists(); renderSuggestions(); renderAllCharts(); renderAnalytics(); }); } }
-function setAllAvailable() { if (!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?")) return; appData.employees.forEach(e => e.status = "Disponible"); dbUpdate({ 'employees': appData.employees }, "♻️ Todo el personal está ahora disponible.").then(() => { renderConfigLists(); renderSuggestions(); }); }
+function setAllAvailable() { if (!confirm("¿Estás seguro de poner a TODOS los empleados en estado 'Disponible'?")) return; appData.employees.forEach(e => { if (e.status !== "Egreso" && e.status !== "Fuera de Servicio") e.status = "Disponible"; }); dbUpdate({ 'employees': appData.employees }, "♻️ Todo el personal está ahora disponible.").then(() => { renderConfigLists(); renderSuggestions(); }); }
 
 function deleteEmployee(id) {
     const emp = appData.employees.find(e => e.id == id);
     if (!emp) return false;
-    if (emp.status !== "Fuera de Servicio") {
-        if (!confirm(`¿Dar de baja a ${emp.name}?\n\nPasará a INACTIVO y se conserva todo su historial y sus totales.`)) return false;
-        emp.status = "Fuera de Servicio";
-        dbUpdate({ 'employees': appData.employees }).then(renderSuggestions);
-        return true;
-    }
-    if (!confirm(`⚠️ BORRAR DEFINITIVAMENTE a ${emp.name}? Se perderá su historial.`)) return false;
-    appData.employees = appData.employees.filter(e => e.id != id);
-    dbUpdate({ 'employees': appData.employees }).then(renderSuggestions);
+    if (!confirm(`¿Dar de baja (Egreso) a ${emp.name}?\n\nSe moverá al archivo histórico de Egresados y se conservará todo su historial intacto.`)) return false;
+    emp.status = "Egreso";
+    dbUpdate({ 'employees': appData.employees }, "📁 Empleado movido al archivo de Egresados.").then(() => {
+        renderConfigLists();
+        renderSuggestions();
+    });
     return true;
 }
 
@@ -1292,6 +1494,7 @@ async function saveXlsx(filename, sheetName, aoa, opts) {
         if (opts.merges && opts.merges.length) ws['!merges'] = opts.merges;
         if (opts.cols) ws['!cols'] = opts.cols.map(w => ({ wch: w }));
         (opts.formulas || []).forEach(f => { ws[X.utils.encode_cell({ r: f.r, c: f.c })] = { t: 'n', f: f.f, v: f.v }; });
+        ws['!views'] = [{ state: 'frozen', xSplit: 1, ySplit: 1 }];
         const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, sheetName);
         X.writeFile(wb, filename);
     } catch (e) {
@@ -1302,10 +1505,17 @@ async function saveXlsx(filename, sheetName, aoa, opts) {
 function exportToExcel() {
     const p = document.getElementById('monthSelector').value;
     if (p === DEC_2025) { notify('Diciembre 2025 es solo un cierre; no tiene detalle diario para exportar.'); return; }
+    const isHours = (payrollViewMode === 'hours');
     const year = periodYear(p);
     const filter = document.getElementById('searchPayroll').value.toUpperCase();
-    const header = ['EMPLEADO']; for (let i = 1; i <= 31; i++) header.push(i);
-    header.push('TOTAL MES', 'ACUM. ANUAL', 'HORAS MES', 'HORAS AÑO');
+
+    let header = ['EMPLEADO']; for (let i = 1; i <= 31; i++) header.push(i);
+    if (isHours) {
+        header.push('TOTAL HORAS (MES)', 'ACUM. HORAS (AÑO)');
+    } else {
+        header.push('TOTAL MES ($)', 'ACUM. ANUAL ($)', 'HORAS MES', 'HORAS AÑO');
+    }
+
     const rows = [header]; const merges = []; const formulas = [];
 
     appData.employees.forEach(emp => {
@@ -1320,7 +1530,8 @@ function exportToExcel() {
                 const a = parseFloat(rec.amount) || 0, hh = parseFloat(rec.hours) || 0;
                 if (!rec.isPhantom) { mTotal += a; mHours += hh; }
                 const sp = Math.min(rec.span, 31 - i);
-                line.push(rec.isPhantom ? 'X' : a);
+                const cellVal = isHours ? (rec.isPhantom ? 'X' : (hh > 0 ? hh : 0)) : (rec.isPhantom ? 'X' : a);
+                line.push(cellVal);
                 for (let k = 1; k < sp; k++) line.push(null);
                 localMerges.push({ s: { r, c: 1 + i }, e: { r, c: i + sp } });
                 i += sp - 1;
@@ -1329,16 +1540,31 @@ function exportToExcel() {
             } else {
                 const a = rec ? (parseFloat(rec.amount) || 0) : 0, hh = rec ? (parseFloat(rec.hours) || 0) : 0;
                 if (!rec || !rec.isPhantom) { mTotal += a; mHours += hh; }
-                line.push(rec && rec.isPhantom ? 'X' : (a > 0 ? a : null));
+                const cellVal = isHours
+                    ? (rec && rec.isPhantom ? 'X' : (hh > 0 ? hh : null))
+                    : (rec && rec.isPhantom ? 'X' : (a > 0 ? a : null));
+                line.push(cellVal);
             }
         }
-        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+        if (emp.status === "Fuera de Servicio" && mTotal === 0 && mHours === 0) return;
         const ys = yearSums(emp.id, year);
-        line.push(mTotal, ys.amt, mHours, ys.hours);
+        if (isHours) {
+            line.push(mHours, ys.hours);
+            formulas.push({ r, c: 32, f: `SUM(B${r + 1}:AF${r + 1})`, v: mHours });
+        } else {
+            line.push(mTotal, ys.amt, mHours, ys.hours);
+            formulas.push({ r, c: 32, f: `SUM(B${r + 1}:AF${r + 1})`, v: mTotal });
+        }
         rows.push(line); merges.push(...localMerges);
-        formulas.push({ r, c: 32, f: `SUM(B${r + 1}:AF${r + 1})`, v: mTotal });
     });
-    saveXlsx(`Nomina_${p}.xlsx`, 'Nómina', rows, { merges, formulas, cols: [34, ...Array(31).fill(5), 11, 12, 10, 10] });
+
+    const filename = isHours ? `Nomina_Horas_${p}.xlsx` : `Nomina_${p}.xlsx`;
+    const sheetName = isHours ? 'Horas Trabajadas' : 'Nómina';
+    const cols = isHours 
+        ? [34, ...Array(31).fill(5), 18, 18] 
+        : [34, ...Array(31).fill(5), 12, 13, 11, 11];
+
+    saveXlsx(filename, sheetName, rows, { merges, formulas, cols });
 }
 
 /* =========================================
@@ -1358,7 +1584,7 @@ function renderSurveyorTable(period) {
         const m = dayMeta(period, i);
         h += `<th class="day-col${m.weekend ? ' day-weekend' : ''}${m.invalid ? ' day-invalid' : ''}"><div>${i}</div><div class="wk">${m.wk}</div></th>`;
     }
-    h += `<th class="center-text">TOTAL MES</th>`;
+    h += `<th class="col-total center-text">TOTAL MES</th>`;
     thead.innerHTML = h;
 
     let grandTotal = 0;
@@ -1385,11 +1611,11 @@ function renderSurveyorTable(period) {
                 cells += `<td class="data-cell day-col ${amt > 0 ? 'has-data' : ''} ${m.weekend ? 'wk-end' : ''}" onclick="cellClick(this, ${emp.id}, ${i}, 'surv')" ondblclick="openSurvEditor(${emp.id}, ${i})">${(rec && rec.obs) ? '<div class="obs-dot"></div>' : ''}${amt > 0 ? amt : ''}</td>`;
             }
         }
-        if (emp.status === "Fuera de Servicio" && mTotal === 0) return;
+        if ((emp.status === "Fuera de Servicio" || emp.status === "Egreso") && mTotal === 0) return;
         grandTotal += mTotal;
 
         const tr = document.createElement('tr');
-        if (emp.status === "Fuera de Servicio") tr.className = 'inactive-row';
+        if (emp.status === "Fuera de Servicio" || emp.status === "Egreso") tr.className = 'inactive-row';
         tr.innerHTML = `<td class="sticky-col" style="text-align:left; padding-left:10px;"><div style="font-weight:600; font-size:0.8rem; color:#6b21a8;">${esc(emp.name)}</div><div style="font-size:0.65rem; color:#64748b">${esc(emp.role)}</div></td>${cells}<td class="total-cell-month center-text" style="color:#6b21a8;">${mTotal}</td>`;
         tbody.appendChild(tr);
     });
@@ -2007,7 +2233,7 @@ function renderQuickRows() {
         <div class="qr-row">
             <select class="form-control qr-emp-select" onchange="updateQuickRow(${i}, 'empId', this.value)">
                 <option value="">-- Seleccionar Empleado --</option>
-                ${appData.employees.filter(e => e.status !== 'Fuera de Servicio' || e.id == row.empId).map(e => `<option value="${e.id}" ${e.id == row.empId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}
+                ${appData.employees.filter(e => (e.status !== 'Fuera de Servicio' && e.status !== 'Egreso') || e.id == row.empId).map(e => `<option value="${e.id}" ${e.id == row.empId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}
             </select>
             <select class="form-control qr-role-select" onchange="updateQuickRow(${i}, 'role', this.value)">
                 ${ROLES.map(r => `<option value="${esc(r)}" ${r == row.role ? 'selected' : ''}>${esc(r)}</option>`).join('')}
